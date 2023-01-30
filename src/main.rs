@@ -1,8 +1,6 @@
 use bevy::{prelude::*, render::camera::ScalingMode, window::close_on_esc};
 use bevy_framepace::{debug::DiagnosticsPlugin, FramepacePlugin, FramepaceSettings, Limiter};
-use super_snake::{game::GamePlugin, level::LevelPlugin, menu::MenuPlugin, GameState, SCALE};
-
-const FPS: f64 = 60.0;
+use super_snake::{game::GamePlugin, level::LevelPlugin, menu::MenuPlugin, GameState, FPS, SCALE};
 
 fn main() {
     let mut app = App::new();
@@ -37,7 +35,10 @@ fn setup_system(mut commands: Commands, mut settings: ResMut<FramepaceSettings>)
     settings.limiter = Limiter::from_framerate(FPS);
 
     let mut camera = Camera2dBundle::default();
-    camera.projection.scaling_mode = ScalingMode::FixedVertical(SCALE);
+    camera.projection.scaling_mode = ScalingMode::Auto {
+        min_height: SCALE * 2.0,
+        min_width: SCALE * 2.0,
+    };
 
     commands.spawn(camera);
 }

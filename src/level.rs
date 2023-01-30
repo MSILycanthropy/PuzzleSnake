@@ -17,9 +17,8 @@ fn level_setup_system(mut commands: Commands) {
     let gray = Color::rgb(0.5, 0.5, 0.5);
     let black = Color::rgb(0.2, 0.2, 0.2);
 
-    // TODO: Figure out why the fuck its these numbers? This seems... not correct.
-    for i in -14..15 {
-        for j in -8..9 {
+    for i in -10..10 {
+        for j in -10..10 {
             let color = if (i + j) % 2 == 0 { gray } else { black };
 
             commands.spawn(SpriteBundle {
