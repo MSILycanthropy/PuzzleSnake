@@ -427,6 +427,16 @@ pub fn snake_death_system(
 ) {
     let head_position = head_query.single();
 
+    if head_position.x > 10
+        || head_position.x < -10
+        || head_position.y > 10
+        || head_position.y < -10
+    {
+        println!("You died!");
+
+        let _ = game_state.set(GameState::GameOver);
+    }
+
     for segment_position in segment_query.iter() {
         if segment_position == head_position {
             println!("You died!");
