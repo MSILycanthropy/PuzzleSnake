@@ -6,7 +6,6 @@ pub mod menu;
 pub mod snake;
 
 pub const SCALE: f32 = 16.0;
-pub const FPS: f64 = 60.0;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Hash)]
 pub enum PlayerDirection {
@@ -23,17 +22,23 @@ pub enum GameState {
     GameOver,
 }
 
-#[derive(Component, Clone, Copy, Eq, PartialEq)]
+#[derive(Component, Clone, Copy, Eq, PartialEq, Debug)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
 }
 
-pub struct Frames(pub u32);
+impl Position {
+    pub fn as_tuple(&self) -> (i32, i32) {
+        (self.x, self.y)
+    }
+}
 
-impl Into<f32> for Frames {
-    fn into(self) -> f32 {
-        (self.0 as f32) / (FPS as f32)
+impl std::ops::Deref for Position {
+    type Target = Position;
+
+    fn deref(&self) -> &Self::Target {
+        self
     }
 }
 
