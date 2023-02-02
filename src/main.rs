@@ -1,6 +1,11 @@
+use std::time::Duration;
+
 use bevy::{prelude::*, render::camera::ScalingMode, window::close_on_esc};
+use bevy_asset_loader::prelude::*;
 use bevy_framepace::{debug::DiagnosticsPlugin, FramepacePlugin, FramepaceSettings, Limiter};
-use super_snake::{game::GamePlugin, level::LevelPlugin, menu::MenuPlugin, GameState, FPS, SCALE};
+use super_snake::{
+    game::GamePlugin, level::LevelPlugin, menu::MenuPlugin, GameState, TextureAssets, SCALE,
+};
 
 fn main() {
     let mut app = App::new();
@@ -26,13 +31,19 @@ fn main() {
     app.add_startup_system(setup_system)
         .add_system(close_on_esc);
 
-    app.add_state(GameState::Menu);
+    app.add_loading_state(
+        LoadingState::new(GameState::AssetsLoading)
+            .continue_to_state(GameState::Menu)
+            .with_collection::<TextureAssets>(),
+    );
+
+    app.add_state(GameState::AssetsLoading);
 
     app.run()
 }
 
 fn setup_system(mut commands: Commands, mut settings: ResMut<FramepaceSettings>) {
-    settings.limiter = Limiter::from_framerate(FPS);
+    settings.limiter = Limiter::Manual(Duration::from_secs_f64(0.125));
 
     let mut camera = Camera2dBundle::default();
     camera.projection.scaling_mode = ScalingMode::Auto {

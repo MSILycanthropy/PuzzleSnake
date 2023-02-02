@@ -2,6 +2,8 @@ use bevy::prelude::*;
 
 use crate::GameState;
 
+pub const LEVEL_SIZE: i32 = 13;
+
 #[derive(Component)]
 struct Level;
 
@@ -17,8 +19,8 @@ fn level_setup_system(mut commands: Commands) {
     let gray = Color::rgb(0.5, 0.5, 0.5);
     let black = Color::rgb(0.2, 0.2, 0.2);
 
-    for i in -10..10 {
-        for j in -10..10 {
+    for i in -LEVEL_SIZE..=LEVEL_SIZE {
+        for j in -LEVEL_SIZE..=LEVEL_SIZE {
             let color = if (i + j) % 2 == 0 { gray } else { black };
 
             commands.spawn(SpriteBundle {
