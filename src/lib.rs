@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_asset_loader::prelude::*;
 
 pub mod game;
 pub mod level;
@@ -17,6 +18,7 @@ pub enum PlayerDirection {
 
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
 pub enum GameState {
+    AssetsLoading,
     Menu,
     Playing,
     GameOver,
@@ -40,6 +42,21 @@ impl std::ops::Deref for Position {
     fn deref(&self) -> &Self::Target {
         self
     }
+}
+
+#[derive(AssetCollection, Resource)]
+pub struct TextureAssets {
+    #[asset(path = "sprites/head.png")]
+    pub head: Handle<Image>,
+    #[asset(path = "sprites/body.png")]
+    pub body: Handle<Image>,
+    #[asset(path = "sprites/body_corner.png")]
+    pub body_corner: Handle<Image>,
+    #[asset(path = "sprites/tail.png")]
+    pub tail: Handle<Image>,
+    #[asset(texture_atlas(tile_size_x = 16., tile_size_y = 16., columns = 3, rows = 1))]
+    #[asset(path = "sprites/wizard_sheet.png")]
+    pub wizard_sheet: Handle<TextureAtlas>,
 }
 
 pub fn despawn<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands: Commands) {

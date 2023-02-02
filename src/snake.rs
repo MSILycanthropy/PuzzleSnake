@@ -1,12 +1,7 @@
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::{GameState, Position};
-
-const SNAKE_HEAD_ASSET: &str = "sprites/head.png";
-const SNAKE_BODY_ASSET: &str = "sprites/body.png";
-const SNAKE_BODY_CORNER_ASSET: &str = "sprites/body_corner.png";
-const SNAKE_TAIL_ASSET: &str = "sprites/tail.png";
+use crate::{level::LEVEL_SIZE, GameState, Position, TextureAssets};
 
 #[derive(Component)]
 pub struct Player;
@@ -74,15 +69,11 @@ pub struct LastTailPosition(pub Option<Position>);
 #[derive(Component)]
 pub struct Food;
 
-pub fn snake_setup_system(mut commands: Commands, asset_server: Res<AssetServer>) {
-    // let head_sprite = asset_server.load("sprites/head.png");
-    // let body_sprite = asset_server.load("sprites/body.png");
-    // let tail_sprite = asset_server.load("sprites/tail.png");
-
+pub fn snake_setup_system(mut commands: Commands, assets: Res<TextureAssets>) {
     commands.spawn((
         SpriteBundle {
             transform: Transform::from_xyz(0.0, 0.0, 1.0),
-            texture: asset_server.load(SNAKE_HEAD_ASSET),
+            texture: assets.head.clone(),
             sprite: Sprite {
                 custom_size: Some(Vec2::new(1., 1.)),
                 ..default()
@@ -98,7 +89,7 @@ pub fn snake_setup_system(mut commands: Commands, asset_server: Res<AssetServer>
         commands.spawn((
             SpriteBundle {
                 transform: Transform::from_xyz(-(i as f32), 0.0, 1.0),
-                texture: asset_server.load(SNAKE_BODY_ASSET),
+                texture: assets.body.clone(),
                 sprite: Sprite {
                     custom_size: Some(Vec2::new(1., 1.)),
                     ..default()
@@ -113,7 +104,7 @@ pub fn snake_setup_system(mut commands: Commands, asset_server: Res<AssetServer>
     commands.spawn((
         SpriteBundle {
             transform: Transform::from_xyz(-3.0, 0.0, 1.0),
-            texture: asset_server.load(SNAKE_TAIL_ASSET),
+            texture: assets.tail.clone(),
             sprite: Sprite {
                 custom_size: Some(Vec2::new(1., 1.)),
                 ..default()
@@ -256,7 +247,7 @@ pub fn rotate_snake_tail_system(
 }
 
 pub fn swap_snake_sprites_system(
-    asset_server: Res<AssetServer>,
+    assets: Res<TextureAssets>,
     mut segments_query: Query<(&Position, &mut Handle<Image>, &mut Transform), With<SnakeSegment>>,
 ) {
     // Oh my god this is incredibly dumb.
@@ -275,9 +266,9 @@ pub fn swap_snake_sprites_system(
             let (_, seg3_pos) = window[2];
 
             let asset = if seg3_pos.x != seg1_pos.x && seg3_pos.y != seg1_pos.y {
-                SNAKE_BODY_CORNER_ASSET
+                assets.body_corner.clone()
             } else {
-                SNAKE_BODY_ASSET
+                assets.body.clone()
             };
 
             let slope = (seg3_pos.y - seg1_pos.y) as f32 / (seg3_pos.x - seg1_pos.x) as f32;
@@ -314,7 +305,7 @@ pub fn swap_snake_sprites_system(
         if let Some((_, asset, corner_rotation)) =
             asset_rotation_map.iter().find(|(i2, _, _)| i2 == &i)
         {
-            *handle = asset_server.load(*asset);
+            *handle = asset.clone();
             transform.rotation = Quat::from_rotation_z(*corner_rotation);
         }
     }
@@ -353,21 +344,25 @@ fn snake_direction_to_rotation(direction: SnakeDirection, slope: f32) -> f32 {
     }
 }
 
-pub fn spawn_food_system(mut commands: Commands, food_query: Query<Entity, With<Food>>) {
+pub fn spawn_food_system(
+    mut commands: Commands,
+    food_query: Query<Entity, With<Food>>,
+    assets: Res<TextureAssets>,
+) {
     if food_query.iter().count() > 0 {
         return;
     }
 
     let mut rng = rand::thread_rng();
-    let x = rng.gen_range(-10..10);
-    let y = rng.gen_range(-10..10);
+    let x = rng.gen_range(-LEVEL_SIZE..LEVEL_SIZE);
+    let y = rng.gen_range(-LEVEL_SIZE..LEVEL_SIZE);
 
     commands.spawn((
-        SpriteBundle {
+        SpriteSheetBundle {
+            texture_atlas: assets.wizard_sheet.clone(),
             transform: Transform::from_xyz(x as f32, y as f32, 1.0),
-            sprite: Sprite {
-                color: Color::rgb(1.0, 0.0, 0.0),
-                custom_size: Some(Vec2::new(0.75, 0.75)),
+            sprite: TextureAtlasSprite {
+                custom_size: Some(Vec2::new(1., 1.)),
                 ..default()
             },
             ..default()
@@ -384,7 +379,7 @@ pub fn snake_growth_system(
     head_query: Query<&Position, With<SnakeHead>>,
     tail_query: Query<Entity, With<SnakeTail>>,
     last_tail_position: Res<LastTailPosition>,
-    asset_server: Res<AssetServer>,
+    assets: Res<TextureAssets>,
 ) {
     let head_position = head_query.single();
 
@@ -399,7 +394,7 @@ pub fn snake_growth_system(
 
                 commands.spawn((
                     SpriteBundle {
-                        texture: asset_server.load(SNAKE_TAIL_ASSET),
+                        texture: assets.tail.clone(),
                         transform: Transform::from_xyz(
                             last_tail_position.x as f32,
                             last_tail_position.y as f32,
@@ -427,10 +422,10 @@ pub fn snake_death_system(
 ) {
     let head_position = head_query.single();
 
-    if head_position.x > 10
-        || head_position.x < -10
-        || head_position.y > 10
-        || head_position.y < -10
+    if head_position.x > LEVEL_SIZE
+        || head_position.x < -LEVEL_SIZE
+        || head_position.y > LEVEL_SIZE
+        || head_position.y < -LEVEL_SIZE
     {
         println!("You died!");
 

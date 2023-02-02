@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.9.1"
+bevy_asset_loader = { version = "0.14.1",  features = ["2d"] }
 bevy_framepace = "0.11.0"
 rand = "0.8.5"
 
