@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use bevy_asset_loader::prelude::*;
+use level::LEVEL_SIZE;
 
+pub mod enemy;
 pub mod game;
 pub mod level;
 pub mod menu;
@@ -34,13 +36,21 @@ impl Position {
     pub fn as_tuple(&self) -> (i32, i32) {
         (self.x, self.y)
     }
+
+    pub fn in_world(&self) -> bool {
+        self.x >= -LEVEL_SIZE
+            && self.x <= LEVEL_SIZE
+            && self.y >= -LEVEL_SIZE
+            && self.y <= LEVEL_SIZE
+    }
 }
 
-impl std::ops::Deref for Position {
-    type Target = Position;
-
-    fn deref(&self) -> &Self::Target {
-        self
+impl From<Vec2> for Position {
+    fn from(vec: Vec2) -> Self {
+        Self {
+            x: vec.x.floor() as i32,
+            y: vec.y.floor() as i32,
+        }
     }
 }
 

@@ -1,7 +1,6 @@
 use bevy::prelude::*;
-use rand::Rng;
 
-use crate::{level::LEVEL_SIZE, GameState, Position, TextureAssets};
+use crate::{enemy::Enemy, level::LEVEL_SIZE, GameState, Position, TextureAssets};
 
 #[derive(Component)]
 pub struct Player;
@@ -16,6 +15,11 @@ pub struct SnakeTail;
 
 #[derive(Component, Default)]
 pub struct SnakeSegment;
+
+#[derive(Resource)]
+pub struct SnakeMoveTimer {
+    timer: Timer,
+}
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Hash)]
 enum SnakeDirection {
@@ -66,9 +70,6 @@ impl Into<Vec3> for SnakeDirection {
 #[derive(Resource)]
 pub struct LastTailPosition(pub Option<Position>);
 
-#[derive(Component)]
-pub struct Food;
-
 pub fn snake_setup_system(mut commands: Commands, assets: Res<TextureAssets>) {
     commands.spawn((
         SpriteBundle {
@@ -116,27 +117,41 @@ pub fn snake_setup_system(mut commands: Commands, assets: Res<TextureAssets>) {
         Position { x: -3, y: 0 },
     ));
 
+    commands.insert_resource(SnakeMoveTimer {
+        timer: Timer::from_seconds(0.125, TimerMode::Repeating),
+    });
     commands.insert_resource(LastTailPosition(None));
 }
 
 pub fn snake_input_system(
+    time: Res<Time>,
+    mut move_timer: ResMut<SnakeMoveTimer>,
     mut head_query: Query<&mut SnakeHead>,
     keyboard_input: Res<Input<KeyCode>>,
 ) {
+    if !move_timer.timer.tick(time.delta()).just_finished() {
+        return;
+    }
+
     let mut head = head_query.single_mut();
 
-    // TODO: A bit of weirdness exists if you try and go mad fast with the key presses
-    let dir = if keyboard_input.just_pressed(KeyCode::W) {
-        SnakeDirection::Up
-    } else if keyboard_input.just_pressed(KeyCode::S) {
-        SnakeDirection::Down
-    } else if keyboard_input.just_pressed(KeyCode::A) {
-        SnakeDirection::Left
-    } else if keyboard_input.just_pressed(KeyCode::D) {
-        SnakeDirection::Right
-    } else {
-        head.direction
-    };
+    let mut dir = head.direction;
+
+    if keyboard_input.pressed(KeyCode::W) {
+        dir = SnakeDirection::Up;
+    }
+
+    if keyboard_input.pressed(KeyCode::S) {
+        dir = SnakeDirection::Down;
+    }
+
+    if keyboard_input.pressed(KeyCode::A) {
+        dir = SnakeDirection::Left;
+    }
+
+    if keyboard_input.pressed(KeyCode::D) {
+        dir = SnakeDirection::Right;
+    }
 
     if dir != head.direction.opposite() {
         head.direction = dir;
@@ -144,10 +159,15 @@ pub fn snake_input_system(
 }
 
 pub fn snake_movement_system(
+    move_timer: Res<SnakeMoveTimer>,
     mut last_tail_position: ResMut<LastTailPosition>,
     mut head_query: Query<(&mut Position, &SnakeHead)>,
     mut segments_query: Query<&mut Position, (With<SnakeSegment>, Without<SnakeHead>)>,
 ) {
+    if !move_timer.timer.just_finished() {
+        return;
+    }
+
     let (mut head_position, head) = head_query.single_mut();
 
     let mut last_position = *head_position;
@@ -175,31 +195,21 @@ pub fn snake_movement_system(
 }
 
 pub fn snake_position_lerp_system(
+    move_timer: Res<SnakeMoveTimer>,
     mut position_query: Query<(&mut Transform, &Position), With<SnakeSegment>>,
 ) {
-    for (mut transform, position) in position_query.iter_mut() {
-        let old_translation = transform.translation;
-        let new_translation = Vec3::new(position.x as f32, position.y as f32, old_translation.z);
+    if !move_timer.timer.just_finished() {
+        return;
+    }
 
-        transform.translation = new_translation;
+    for (mut transform, position) in position_query.iter_mut() {
+        transform.translation = Vec3::new(
+            position.x as f32,
+            position.y as f32,
+            transform.translation.z,
+        );
     }
 }
-
-// TODO: This might be how we want movement to be when we have actual sprite
-// pub fn snake_segment_position_lerp_system(
-//     mut position_query: Query<
-//         (&mut Transform, &Position),
-//         (With<SnakeSegment>, Without<SnakeHead>),
-//     >,
-// ) {
-//     for (mut transform, position) in position_query.iter_mut() {
-//         transform.translation = Vec3::new(
-//             position.x as f32,
-//             position.y as f32,
-//             transform.translation.z,
-//         );
-//     }
-// }
 
 pub fn rotate_snake_head_system(mut head_query: Query<(&mut Transform, &SnakeHead)>) {
     let (mut transform, head) = head_query.single_mut();
@@ -344,73 +354,35 @@ fn snake_direction_to_rotation(direction: SnakeDirection, slope: f32) -> f32 {
     }
 }
 
-pub fn spawn_food_system(
-    mut commands: Commands,
-    food_query: Query<Entity, With<Food>>,
-    assets: Res<TextureAssets>,
-) {
-    if food_query.iter().count() > 0 {
-        return;
-    }
-
-    let mut rng = rand::thread_rng();
-    let x = rng.gen_range(-LEVEL_SIZE..LEVEL_SIZE);
-    let y = rng.gen_range(-LEVEL_SIZE..LEVEL_SIZE);
-
-    commands.spawn((
-        SpriteSheetBundle {
-            texture_atlas: assets.wizard_sheet.clone(),
-            transform: Transform::from_xyz(x as f32, y as f32, 1.0),
-            sprite: TextureAtlasSprite {
-                custom_size: Some(Vec2::new(1., 1.)),
-                ..default()
-            },
-            ..default()
-        },
-        Food,
-        Position { x, y },
-    ));
-}
-
 // TODO: Spawn the tail with the correct rotation.
 pub fn snake_growth_system(
     mut commands: Commands,
-    food_query: Query<(Entity, &Position), With<Food>>,
+    tail_query: Query<(&Transform, &Position), With<SnakeTail>>,
+    enemy_query: Query<(Entity, &Position), With<Enemy>>,
     head_query: Query<&Position, With<SnakeHead>>,
-    tail_query: Query<Entity, With<SnakeTail>>,
-    last_tail_position: Res<LastTailPosition>,
     assets: Res<TextureAssets>,
 ) {
     let head_position = head_query.single();
 
-    for (food_entity, food_position) in food_query.iter() {
-        if let Some(last_tail_position) = last_tail_position.0 {
-            if food_position == head_position {
-                for entity in tail_query.iter() {
-                    commands.entity(entity).remove::<SnakeTail>();
-                }
+    for (enemy_entity, enemy_position) in enemy_query.iter() {
+        if enemy_position == head_position {
+            let (transform, position) = tail_query.single();
 
-                commands.entity(food_entity).despawn();
+            commands.entity(enemy_entity).despawn();
 
-                commands.spawn((
-                    SpriteBundle {
-                        texture: assets.tail.clone(),
-                        transform: Transform::from_xyz(
-                            last_tail_position.x as f32,
-                            last_tail_position.y as f32,
-                            1.0,
-                        ),
-                        sprite: Sprite {
-                            custom_size: Some(Vec2::new(1., 1.)),
-                            ..default()
-                        },
+            commands.spawn((
+                SpriteBundle {
+                    texture: assets.body.clone(),
+                    transform: transform.clone(),
+                    sprite: Sprite {
+                        custom_size: Some(Vec2::new(1., 1.)),
                         ..default()
                     },
-                    SnakeTail::default(),
-                    SnakeSegment,
-                    last_tail_position,
-                ));
-            }
+                    ..default()
+                },
+                SnakeSegment,
+                position.clone(),
+            ));
         }
     }
 }
@@ -420,6 +392,12 @@ pub fn snake_death_system(
     head_query: Query<&Position, With<SnakeHead>>,
     mut game_state: ResMut<State<GameState>>,
 ) {
+    let segment_count = segment_query.iter().count();
+
+    if segment_count <= 1 {
+        let _ = game_state.set(GameState::GameOver);
+    }
+
     let head_position = head_query.single();
 
     if head_position.x > LEVEL_SIZE
