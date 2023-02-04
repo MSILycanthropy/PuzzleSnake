@@ -27,8 +27,8 @@ impl Plugin for EnemyPlugin {
                 .with_system(move_enemy_system)
                 .with_system(map_enemy_world_position.after(move_enemy_system))
                 .with_system(enemy_attack_system.after(map_enemy_world_position))
-                .with_system(enemy_attack_move_system.after(enemy_attack_system))
-                .with_system(enemy_attack_damage_system.after(enemy_attack_move_system)),
+                .with_system(enemy_attack_damage_system)
+                .with_system(enemy_attack_move_system),
         )
         .add_system_set(
             SystemSet::on_exit(GameState::Playing)
@@ -104,6 +104,8 @@ fn spawn_enemy_system(
 
 // TODO: Make this a lot smarter. Right now it's just random movement.
 // There is a pathfinding crate that could be used.
+
+// ALso rn if an enemy ends up outside of the map.. the game just gets stuck in an infinite loop
 fn move_enemy_system(
     time: Res<Time>,
     mut enemy_query: Query<(&mut Enemy, &mut Position), With<Enemy>>,
@@ -177,7 +179,6 @@ fn enemy_attack_system(
     }
 }
 
-// TODO: Destroy off screen ones
 fn enemy_attack_move_system(
     time: Res<Time>,
     mut commands: Commands,
@@ -191,11 +192,16 @@ fn enemy_attack_move_system(
         transform.translation.y += movement_vector.y;
 
         if !Position::from(transform.translation.truncate()).in_world() {
+            println!("Despawning enemy attack");
             commands.entity(entity).despawn();
+            println!("Despawned enemy attack");
         }
     }
 }
 
+// TODO: There's some weird issue with deleting them and where they update to
+// a frame later. Not really sure why that happens
+// We might just wanna mask this with an animation, or something
 fn enemy_attack_damage_system(
     mut commands: Commands,
     mut enemy_attack_query: Query<(Entity, &Transform), With<EnemyAttack>>,
@@ -204,7 +210,11 @@ fn enemy_attack_damage_system(
         (With<SnakeSegment>, Without<SnakeTail>, Without<SnakeHead>),
     >,
 ) {
-    let last_segment = segments_query.iter_mut().last().unwrap().0;
+    let last_segment_entity = if let Some(last_segment) = segments_query.iter().last() {
+        last_segment.0
+    } else {
+        return;
+    };
 
     for (_, segment_transform) in segments_query.iter_mut() {
         for (enemy_attack_entity, enemy_attack_transform) in enemy_attack_query.iter_mut() {
@@ -214,7 +224,8 @@ fn enemy_attack_damage_system(
                 < ENEMY_ATTACK_DAMAGE_RADIUS
             {
                 commands.entity(enemy_attack_entity).despawn();
-                commands.entity(last_segment).despawn();
+                commands.entity(last_segment_entity).despawn();
+                return;
             }
         }
     }

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{enemy::Enemy, level::LEVEL_SIZE, GameState, Position, TextureAssets};
+use crate::{enemy::Enemy, GameState, Position, TextureAssets};
 
 #[derive(Component)]
 pub struct Player;
@@ -357,17 +357,23 @@ fn snake_direction_to_rotation(direction: SnakeDirection, slope: f32) -> f32 {
 // TODO: Spawn the tail with the correct rotation.
 pub fn snake_growth_system(
     mut commands: Commands,
+    move_timer: Res<SnakeMoveTimer>,
     tail_query: Query<(&Transform, &Position), With<SnakeTail>>,
     enemy_query: Query<(Entity, &Position), With<Enemy>>,
     head_query: Query<&Position, With<SnakeHead>>,
     assets: Res<TextureAssets>,
 ) {
+    if !move_timer.timer.just_finished() {
+        return;
+    }
+
     let head_position = head_query.single();
 
     for (enemy_entity, enemy_position) in enemy_query.iter() {
         if enemy_position == head_position {
             let (transform, position) = tail_query.single();
 
+            // TODO: this line causes a warning in bevy for some reason now?
             commands.entity(enemy_entity).despawn();
 
             commands.spawn((
@@ -400,11 +406,7 @@ pub fn snake_death_system(
 
     let head_position = head_query.single();
 
-    if head_position.x > LEVEL_SIZE
-        || head_position.x < -LEVEL_SIZE
-        || head_position.y > LEVEL_SIZE
-        || head_position.y < -LEVEL_SIZE
-    {
+    if !head_position.in_world() {
         println!("You died!");
 
         let _ = game_state.set(GameState::GameOver);
