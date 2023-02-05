@@ -1,11 +1,13 @@
 use bevy::prelude::*;
+use bevy_kira_audio::prelude::*;
 use rand::{seq::SliceRandom, Rng};
 
 use crate::{
     despawn,
     level::LEVEL_SIZE,
+    music::Gameplay,
     snake::{GrowEffect, SnakeHead, SnakeSegment, SnakeTail},
-    GameState, Position, TextureAssets,
+    AudioAssets, GameState, Position, TextureAssets,
 };
 
 const ENEMY_COUNT: usize = 3;
@@ -58,7 +60,7 @@ impl Enemy {
     }
 
     fn reset_attack_animation_timer(&mut self) {
-        self.atk_anim_timer = Timer::from_seconds(0.5, TimerMode::Once);
+        self.atk_anim_timer = Timer::from_seconds(0.75, TimerMode::Once);
     }
 }
 
@@ -180,6 +182,8 @@ fn spawn_enemy_system(
 
 fn enemy_state_management_system(
     time: Res<Time>,
+    audio_assets: Res<AudioAssets>,
+    gameplay_channel: Res<AudioChannel<Gameplay>>,
     mut enemy_query: Query<(&mut Enemy, &mut EnemyState, &mut TextureAtlasSprite)>,
 ) {
     for (mut enemy, mut enemy_state, mut sprite) in enemy_query.iter_mut() {
@@ -195,7 +199,12 @@ fn enemy_state_management_system(
 
         match new_state {
             EnemyState::Idle => enemy.reset_decision_timer(),
-            EnemyState::AttackAnimation => sprite.index = 2,
+            EnemyState::AttackAnimation => {
+                sprite.index = 2;
+                gameplay_channel
+                    .play(audio_assets.wizard_prepare.clone())
+                    .with_volume(0.25);
+            }
             _ => {}
         }
 
@@ -232,6 +241,8 @@ fn enemy_attack_animation_system(
 
 fn enemy_attack_system(
     assets: Res<TextureAssets>,
+    audio_assets: Res<AudioAssets>,
+    gameplay_channel: Res<AudioChannel<Gameplay>>,
     segments_query: Query<&Position, With<SnakeSegment>>,
     mut commands: Commands,
     mut enemy_query: Query<(&mut Enemy, &mut EnemyState, &EnemyType, &Transform), With<Enemy>>,
@@ -270,6 +281,8 @@ fn enemy_attack_system(
                     },
                     EnemyAttack { direction },
                 ));
+
+                gameplay_channel.play(audio_assets.wizard_attack.clone());
             }
         }
 
@@ -287,12 +300,14 @@ fn enemy_movement_system(
             &EnemyType,
             &mut Target,
             &mut Position,
+            &mut TextureAtlasSprite,
         ),
         With<Enemy>,
     >,
     segments_query: Query<&Position, (With<SnakeSegment>, Without<Enemy>)>,
 ) {
-    for (mut enemy, mut enemy_state, enemy_type, mut target, mut position) in enemy_query.iter_mut()
+    for (mut enemy, mut enemy_state, enemy_type, mut target, mut position, mut sprite) in
+        enemy_query.iter_mut()
     {
         if !enemy_state.is_moving() {
             continue;
@@ -325,14 +340,14 @@ fn enemy_movement_system(
             continue;
         }
 
-        println!("Enemy: {:?} Target: {:?}", position, target_position);
-
         let old_position = position.clone();
 
         if position.x < target_position.x {
             position.x += 1;
+            sprite.index = 1;
         } else if position.x > target_position.x {
             position.x -= 1;
+            sprite.index = 0;
         }
 
         if position.y < target_position.y {
@@ -373,10 +388,12 @@ fn enemy_attack_move_system(
 }
 
 // TODO: There's some weird issue with deleting them and where they update to
-// a frame later. Not really sure why that happens
-// We might just wanna mask this with an animation, or something
+// a frame later. Not really sure why that happens. So I'm just masking it
+// with a stupid effect lmao. It looks kinda stupid but... it works.
 fn enemy_attack_damage_system(
     assets: Res<TextureAssets>,
+    audio_assets: Res<AudioAssets>,
+    gameplay_channel: Res<AudioChannel<Gameplay>>,
     mut commands: Commands,
     mut enemy_attack_query: Query<(Entity, &Transform), With<EnemyAttack>>,
     mut segments_query: Query<
@@ -420,6 +437,8 @@ fn enemy_attack_damage_system(
                         timer: Timer::from_seconds(0.33, TimerMode::Once),
                     },
                 ));
+
+                gameplay_channel.play(audio_assets.hit.clone());
                 return;
             }
         }

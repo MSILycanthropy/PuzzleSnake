@@ -1,9 +1,10 @@
 use bevy::{prelude::*, render::camera::ScalingMode, window::close_on_esc};
 use bevy_asset_loader::prelude::*;
 use bevy_framepace::{debug::DiagnosticsPlugin, FramepacePlugin, FramepaceSettings, Limiter};
+use bevy_kira_audio::prelude::*;
 use super_snake::{
-    enemy::EnemyPlugin, game::GamePlugin, level::LevelPlugin, menu::MenuPlugin, GameState,
-    TextureAssets, SCALE,
+    enemy::EnemyPlugin, game::GamePlugin, level::LevelPlugin, menu::MenuPlugin, music::MusicPlugin,
+    AudioAssets, GameState, TextureAssets, SCALE,
 };
 
 fn main() {
@@ -23,9 +24,11 @@ fn main() {
     )
     .add_plugin(FramepacePlugin)
     .add_plugin(DiagnosticsPlugin)
+    .add_plugin(AudioPlugin)
     .add_plugin(MenuPlugin)
     .add_plugin(GamePlugin)
     .add_plugin(EnemyPlugin)
+    .add_plugin(MusicPlugin)
     .add_plugin(LevelPlugin);
 
     app.add_startup_system(setup_system)
@@ -34,7 +37,8 @@ fn main() {
     app.add_loading_state(
         LoadingState::new(GameState::AssetsLoading)
             .continue_to_state(GameState::Menu)
-            .with_collection::<TextureAssets>(),
+            .with_collection::<TextureAssets>()
+            .with_collection::<AudioAssets>(),
     );
 
     app.add_state(GameState::AssetsLoading);

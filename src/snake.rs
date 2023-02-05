@@ -1,6 +1,7 @@
 use bevy::prelude::*;
+use bevy_kira_audio::prelude::*;
 
-use crate::{enemy::Enemy, GameState, Position, TextureAssets};
+use crate::{enemy::Enemy, music::Gameplay, AudioAssets, GameState, Position, TextureAssets};
 
 #[derive(Component)]
 pub struct Player;
@@ -372,6 +373,8 @@ fn snake_direction_to_rotation(direction: SnakeDirection, slope: f32) -> f32 {
 // TODO: Spawn the tail with the correct rotation.
 pub fn snake_growth_system(
     mut commands: Commands,
+    audio_assets: Res<AudioAssets>,
+    gameplay_channel: Res<AudioChannel<Gameplay>>,
     move_timer: Res<SnakeMoveTimer>,
     tail_query: Query<(&Transform, &Position), With<SnakeTail>>,
     enemy_query: Query<(Entity, &Position), With<Enemy>>,
@@ -419,6 +422,10 @@ pub fn snake_growth_system(
                     timer: Timer::from_seconds(0.33, TimerMode::Once),
                 },
             ));
+
+            gameplay_channel
+                .play(audio_assets.eat.clone())
+                .with_volume(0.5);
         }
     }
 }
@@ -436,6 +443,8 @@ pub fn delete_grow_effect_system(
 }
 
 pub fn snake_death_system(
+    audio_assets: Res<AudioAssets>,
+    gameplay_channel: Res<AudioChannel<Gameplay>>,
     segment_query: Query<&Position, (With<SnakeSegment>, Without<SnakeHead>)>,
     head_query: Query<&Position, With<SnakeHead>>,
     mut game_state: ResMut<State<GameState>>,
@@ -449,16 +458,15 @@ pub fn snake_death_system(
     let head_position = head_query.single();
 
     if !head_position.in_world() {
-        println!("You died!");
-
         let _ = game_state.set(GameState::GameOver);
+
+        gameplay_channel.play(audio_assets.death_by_bumping.clone());
     }
 
     for segment_position in segment_query.iter() {
         if segment_position == head_position {
-            println!("You died!");
-
             let _ = game_state.set(GameState::GameOver);
+            gameplay_channel.play(audio_assets.death_by_bumping.clone());
         }
     }
 }

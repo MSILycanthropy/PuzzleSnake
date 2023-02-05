@@ -1,11 +1,13 @@
 use bevy::prelude::*;
 use bevy_asset_loader::prelude::*;
+use bevy_kira_audio::prelude::*;
 use level::LEVEL_SIZE;
 
 pub mod enemy;
 pub mod game;
 pub mod level;
 pub mod menu;
+pub mod music;
 pub mod snake;
 
 pub const SCALE: f32 = 16.0;
@@ -80,6 +82,26 @@ pub struct TextureAssets {
     pub wizard_sheet: Handle<TextureAtlas>,
     #[asset(path = "sprites/projectile.png")]
     pub projectile: Handle<Image>,
+}
+
+#[derive(AssetCollection, Resource)]
+pub struct AudioAssets {
+    #[asset(path = "music/gameplay.wav")]
+    pub gameplay_music: Handle<AudioSource>,
+    #[asset(path = "music/menu.wav")]
+    pub menu_music: Handle<AudioSource>,
+
+    #[asset(path = "sounds/wizard_prepare.ogg")]
+    pub wizard_prepare: Handle<AudioSource>,
+    #[asset(path = "sounds/wizard_attack.ogg")]
+    pub wizard_attack: Handle<AudioSource>,
+
+    #[asset(path = "sounds/hit.ogg")]
+    pub hit: Handle<AudioSource>,
+    #[asset(path = "sounds/death_by_bumping.ogg")]
+    pub death_by_bumping: Handle<AudioSource>,
+    #[asset(path = "sounds/eat.ogg")]
+    pub eat: Handle<AudioSource>,
 }
 
 pub fn despawn<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands: Commands) {
