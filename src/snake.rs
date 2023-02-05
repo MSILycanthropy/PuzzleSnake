@@ -21,6 +21,11 @@ pub struct SnakeMoveTimer {
     timer: Timer,
 }
 
+#[derive(Component)]
+pub struct GrowEffect {
+    pub timer: Timer,
+}
+
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Hash)]
 enum SnakeDirection {
     Up,
@@ -123,16 +128,14 @@ pub fn snake_setup_system(mut commands: Commands, assets: Res<TextureAssets>) {
     commands.insert_resource(LastTailPosition(None));
 }
 
+pub fn tick_snake_timers(time: Res<Time>, mut timer: ResMut<SnakeMoveTimer>) {
+    timer.timer.tick(time.delta());
+}
+
 pub fn snake_input_system(
-    time: Res<Time>,
-    mut move_timer: ResMut<SnakeMoveTimer>,
     mut head_query: Query<&mut SnakeHead>,
     keyboard_input: Res<Input<KeyCode>>,
 ) {
-    if !move_timer.timer.tick(time.delta()).just_finished() {
-        return;
-    }
-
     let mut head = head_query.single_mut();
 
     let mut dir = head.direction;
@@ -211,7 +214,14 @@ pub fn snake_position_lerp_system(
     }
 }
 
-pub fn rotate_snake_head_system(mut head_query: Query<(&mut Transform, &SnakeHead)>) {
+pub fn rotate_snake_head_system(
+    timer: Res<SnakeMoveTimer>,
+    mut head_query: Query<(&mut Transform, &SnakeHead)>,
+) {
+    if !timer.timer.just_finished() {
+        return;
+    }
+
     let (mut transform, head) = head_query.single_mut();
 
     match &head.direction {
@@ -389,6 +399,33 @@ pub fn snake_growth_system(
                 SnakeSegment,
                 position.clone(),
             ));
+
+            commands.spawn((
+                SpriteBundle {
+                    texture: assets.effect.clone(),
+                    transform: transform.clone(),
+                    sprite: Sprite {
+                        custom_size: Some(Vec2::new(2.5, 2.5)),
+                        ..default()
+                    },
+                    ..default()
+                },
+                GrowEffect {
+                    timer: Timer::from_seconds(0.33, TimerMode::Once),
+                },
+            ));
+        }
+    }
+}
+
+pub fn delete_grow_effect_system(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut effect_query: Query<(Entity, &mut GrowEffect)>,
+) {
+    for (entity, mut enemy) in effect_query.iter_mut() {
+        if enemy.timer.tick(time.delta()).just_finished() {
+            commands.entity(entity).despawn();
         }
     }
 }

@@ -69,6 +69,8 @@ pub struct TextureAssets {
     pub body_corner: Handle<Image>,
     #[asset(path = "sprites/tail.png")]
     pub tail: Handle<Image>,
+    #[asset(path = "sprites/effect.png")]
+    pub effect: Handle<Image>,
 
     #[asset(texture_atlas(tile_size_x = 16., tile_size_y = 16., columns = 3, rows = 1))]
     #[asset(path = "sprites/wizard_sheet.png")]

@@ -4,7 +4,7 @@ use rand::{seq::SliceRandom, Rng};
 use crate::{
     despawn,
     level::LEVEL_SIZE,
-    snake::{SnakeHead, SnakeSegment, SnakeTail},
+    snake::{GrowEffect, SnakeHead, SnakeSegment, SnakeTail},
     GameState, Position, TextureAssets,
 };
 
@@ -44,11 +44,6 @@ pub struct Enemy {
     attack_timer: Timer,
 }
 
-#[derive(Component)]
-struct EnemyAttack {
-    direction: Vec2,
-}
-
 impl Enemy {
     fn will_move(&mut self, time: &Res<Time>) -> bool {
         self.move_timer.tick(time.delta()).just_finished()
@@ -67,6 +62,43 @@ impl Enemy {
     }
 }
 
+impl From<EnemyType> for Enemy {
+    fn from(enemy_type: EnemyType) -> Self {
+        let mut rng = rand::thread_rng();
+
+        match enemy_type {
+            EnemyType::Wizard => Enemy {
+                move_timer: Timer::from_seconds(ENEMY_MOVE_TIME, TimerMode::Repeating),
+                attack_timer: Timer::from_seconds(
+                    rng.gen_range(ENEMY_ATTACK_TIME_MIN..ENEMY_ATTACK_TIME_MAX),
+                    TimerMode::Once,
+                ),
+            },
+        }
+    }
+}
+
+#[derive(Component)]
+enum EnemyType {
+    Wizard,
+}
+
+#[derive(Bundle)]
+struct EnemyBundle {
+    enemy: Enemy,
+    sprite_sheet: SpriteSheetBundle,
+    enemy_type: EnemyType,
+    position: Position,
+}
+
+#[derive(Component)]
+struct EnemyAttack {
+    direction: Vec2,
+}
+
+#[derive(Component)]
+struct Attacking;
+
 fn spawn_enemy_system(
     mut commands: Commands,
     enemy_query: Query<Entity, With<Enemy>>,
@@ -81,8 +113,9 @@ fn spawn_enemy_system(
     let x = rng.gen_range(-LEVEL_SIZE..LEVEL_SIZE);
     let y = rng.gen_range(-LEVEL_SIZE..LEVEL_SIZE);
 
-    commands.spawn((
-        SpriteSheetBundle {
+    commands.spawn(EnemyBundle {
+        enemy: Enemy::from(EnemyType::Wizard),
+        sprite_sheet: SpriteSheetBundle {
             texture_atlas: assets.wizard_sheet.clone(),
             transform: Transform::from_xyz(x as f32, y as f32, 1.0),
             sprite: TextureAtlasSprite {
@@ -91,15 +124,9 @@ fn spawn_enemy_system(
             },
             ..default()
         },
-        Enemy {
-            move_timer: Timer::from_seconds(ENEMY_MOVE_TIME, TimerMode::Repeating),
-            attack_timer: Timer::from_seconds(
-                rng.gen_range(ENEMY_ATTACK_TIME_MIN..ENEMY_ATTACK_TIME_MAX),
-                TimerMode::Once,
-            ),
-        },
-        Position { x, y },
-    ));
+        enemy_type: EnemyType::Wizard,
+        position: Position { x, y },
+    });
 }
 
 // TODO: Make this a lot smarter. Right now it's just random movement.
@@ -203,6 +230,7 @@ fn enemy_attack_move_system(
 // a frame later. Not really sure why that happens
 // We might just wanna mask this with an animation, or something
 fn enemy_attack_damage_system(
+    assets: Res<TextureAssets>,
     mut commands: Commands,
     mut enemy_attack_query: Query<(Entity, &Transform), With<EnemyAttack>>,
     mut segments_query: Query<
@@ -216,6 +244,12 @@ fn enemy_attack_damage_system(
         return;
     };
 
+    let last_segment_transform = if let Some(last_segment) = segments_query.iter().last() {
+        last_segment.1.clone()
+    } else {
+        return;
+    };
+
     for (_, segment_transform) in segments_query.iter_mut() {
         for (enemy_attack_entity, enemy_attack_transform) in enemy_attack_query.iter_mut() {
             if enemy_attack_transform
@@ -225,6 +259,21 @@ fn enemy_attack_damage_system(
             {
                 commands.entity(enemy_attack_entity).despawn();
                 commands.entity(last_segment_entity).despawn();
+
+                commands.spawn((
+                    SpriteBundle {
+                        texture: assets.effect.clone(),
+                        transform: last_segment_transform.clone(),
+                        sprite: Sprite {
+                            custom_size: Some(Vec2::new(2.5, 2.5)),
+                            ..default()
+                        },
+                        ..default()
+                    },
+                    GrowEffect {
+                        timer: Timer::from_seconds(0.33, TimerMode::Once),
+                    },
+                ));
                 return;
             }
         }
