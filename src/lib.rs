@@ -38,7 +38,10 @@ impl Position {
     }
 
     pub fn in_world(&self) -> bool {
-        self.x > -LEVEL_SIZE && self.x < LEVEL_SIZE && self.y > -LEVEL_SIZE && self.y < LEVEL_SIZE
+        self.x >= -LEVEL_SIZE
+            && self.x <= LEVEL_SIZE
+            && self.y >= -LEVEL_SIZE
+            && self.y <= LEVEL_SIZE
     }
 }
 
@@ -75,6 +78,8 @@ pub struct TextureAssets {
     #[asset(texture_atlas(tile_size_x = 16., tile_size_y = 16., columns = 3, rows = 1))]
     #[asset(path = "sprites/wizard_sheet.png")]
     pub wizard_sheet: Handle<TextureAtlas>,
+    #[asset(path = "sprites/projectile.png")]
+    pub projectile: Handle<Image>,
 }
 
 pub fn despawn<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands: Commands) {

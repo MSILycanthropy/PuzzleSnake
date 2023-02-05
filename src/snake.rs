@@ -18,7 +18,7 @@ pub struct SnakeSegment;
 
 #[derive(Resource)]
 pub struct SnakeMoveTimer {
-    timer: Timer,
+    pub timer: Timer,
 }
 
 #[derive(Component)]
@@ -248,7 +248,12 @@ pub fn rotate_snake_tail_system(
     >,
 ) {
     let mut tail = tail_query.iter_mut().next().unwrap();
-    let last_segment = segments_query.iter_mut().last().unwrap();
+
+    let last_segment = if let Some(last_segment) = segments_query.iter_mut().last() {
+        last_segment
+    } else {
+        return;
+    };
 
     let (tail_x, tail_y) = (tail.0.x, tail.0.y);
     let (last_segment_x, last_segment_y) = (last_segment.x, last_segment.y);
