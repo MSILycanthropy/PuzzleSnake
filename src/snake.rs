@@ -1,6 +1,7 @@
 use bevy::prelude::*;
+use bevy_kira_audio::prelude::*;
 
-use crate::{enemy::Enemy, level::LEVEL_SIZE, GameState, Position, TextureAssets};
+use crate::{enemy::Enemy, music::Gameplay, AudioAssets, GameState, Position, TextureAssets};
 
 #[derive(Component)]
 pub struct Player;
@@ -18,7 +19,12 @@ pub struct SnakeSegment;
 
 #[derive(Resource)]
 pub struct SnakeMoveTimer {
-    timer: Timer,
+    pub timer: Timer,
+}
+
+#[derive(Component)]
+pub struct GrowEffect {
+    pub timer: Timer,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Hash)]
@@ -123,16 +129,14 @@ pub fn snake_setup_system(mut commands: Commands, assets: Res<TextureAssets>) {
     commands.insert_resource(LastTailPosition(None));
 }
 
+pub fn tick_snake_timers(time: Res<Time>, mut timer: ResMut<SnakeMoveTimer>) {
+    timer.timer.tick(time.delta());
+}
+
 pub fn snake_input_system(
-    time: Res<Time>,
-    mut move_timer: ResMut<SnakeMoveTimer>,
     mut head_query: Query<&mut SnakeHead>,
     keyboard_input: Res<Input<KeyCode>>,
 ) {
-    if !move_timer.timer.tick(time.delta()).just_finished() {
-        return;
-    }
-
     let mut head = head_query.single_mut();
 
     let mut dir = head.direction;
@@ -211,7 +215,14 @@ pub fn snake_position_lerp_system(
     }
 }
 
-pub fn rotate_snake_head_system(mut head_query: Query<(&mut Transform, &SnakeHead)>) {
+pub fn rotate_snake_head_system(
+    timer: Res<SnakeMoveTimer>,
+    mut head_query: Query<(&mut Transform, &SnakeHead)>,
+) {
+    if !timer.timer.just_finished() {
+        return;
+    }
+
     let (mut transform, head) = head_query.single_mut();
 
     match &head.direction {
@@ -238,7 +249,12 @@ pub fn rotate_snake_tail_system(
     >,
 ) {
     let mut tail = tail_query.iter_mut().next().unwrap();
-    let last_segment = segments_query.iter_mut().last().unwrap();
+
+    let last_segment = if let Some(last_segment) = segments_query.iter_mut().last() {
+        last_segment
+    } else {
+        return;
+    };
 
     let (tail_x, tail_y) = (tail.0.x, tail.0.y);
     let (last_segment_x, last_segment_y) = (last_segment.x, last_segment.y);
@@ -357,17 +373,25 @@ fn snake_direction_to_rotation(direction: SnakeDirection, slope: f32) -> f32 {
 // TODO: Spawn the tail with the correct rotation.
 pub fn snake_growth_system(
     mut commands: Commands,
+    audio_assets: Res<AudioAssets>,
+    gameplay_channel: Res<AudioChannel<Gameplay>>,
+    move_timer: Res<SnakeMoveTimer>,
     tail_query: Query<(&Transform, &Position), With<SnakeTail>>,
     enemy_query: Query<(Entity, &Position), With<Enemy>>,
     head_query: Query<&Position, With<SnakeHead>>,
     assets: Res<TextureAssets>,
 ) {
+    if !move_timer.timer.just_finished() {
+        return;
+    }
+
     let head_position = head_query.single();
 
     for (enemy_entity, enemy_position) in enemy_query.iter() {
         if enemy_position == head_position {
             let (transform, position) = tail_query.single();
 
+            // TODO: this line causes a warning in bevy for some reason now?
             commands.entity(enemy_entity).despawn();
 
             commands.spawn((
@@ -383,11 +407,44 @@ pub fn snake_growth_system(
                 SnakeSegment,
                 position.clone(),
             ));
+
+            commands.spawn((
+                SpriteBundle {
+                    texture: assets.effect.clone(),
+                    transform: transform.clone(),
+                    sprite: Sprite {
+                        custom_size: Some(Vec2::new(2.5, 2.5)),
+                        ..default()
+                    },
+                    ..default()
+                },
+                GrowEffect {
+                    timer: Timer::from_seconds(0.33, TimerMode::Once),
+                },
+            ));
+
+            gameplay_channel
+                .play(audio_assets.eat.clone())
+                .with_volume(0.5);
+        }
+    }
+}
+
+pub fn delete_grow_effect_system(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut effect_query: Query<(Entity, &mut GrowEffect)>,
+) {
+    for (entity, mut enemy) in effect_query.iter_mut() {
+        if enemy.timer.tick(time.delta()).just_finished() {
+            commands.entity(entity).despawn();
         }
     }
 }
 
 pub fn snake_death_system(
+    audio_assets: Res<AudioAssets>,
+    gameplay_channel: Res<AudioChannel<Gameplay>>,
     segment_query: Query<&Position, (With<SnakeSegment>, Without<SnakeHead>)>,
     head_query: Query<&Position, With<SnakeHead>>,
     mut game_state: ResMut<State<GameState>>,
@@ -400,21 +457,16 @@ pub fn snake_death_system(
 
     let head_position = head_query.single();
 
-    if head_position.x > LEVEL_SIZE
-        || head_position.x < -LEVEL_SIZE
-        || head_position.y > LEVEL_SIZE
-        || head_position.y < -LEVEL_SIZE
-    {
-        println!("You died!");
-
+    if !head_position.in_world() {
         let _ = game_state.set(GameState::GameOver);
+
+        gameplay_channel.play(audio_assets.death_by_bumping.clone());
     }
 
     for segment_position in segment_query.iter() {
         if segment_position == head_position {
-            println!("You died!");
-
             let _ = game_state.set(GameState::GameOver);
+            gameplay_channel.play(audio_assets.death_by_bumping.clone());
         }
     }
 }

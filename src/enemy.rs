@@ -1,17 +1,18 @@
 use bevy::prelude::*;
+use bevy_kira_audio::prelude::*;
 use rand::{seq::SliceRandom, Rng};
 
 use crate::{
     despawn,
     level::LEVEL_SIZE,
-    snake::{SnakeHead, SnakeSegment, SnakeTail},
-    GameState, Position, TextureAssets,
+    music::Gameplay,
+    snake::{GrowEffect, SnakeHead, SnakeSegment, SnakeTail},
+    AudioAssets, GameState, Position, TextureAssets,
 };
 
 const ENEMY_COUNT: usize = 3;
-const ENEMY_MOVE_TIME: f32 = 0.875;
-const ENEMY_ATTACK_TIME_MIN: f32 = 4.0;
-const ENEMY_ATTACK_TIME_MAX: f32 = 8.0;
+const ENEMY_DECISION_TIME_MIN: f32 = 0.5;
+const ENEMY_DECISION_TIME_MAX: f32 = 2.0;
 const ENEMY_ATTACK_SPEED: f32 = 3.0;
 const ENEMY_ATTACK_DAMAGE_RADIUS: f32 = 0.75;
 
@@ -24,11 +25,14 @@ impl Plugin for EnemyPlugin {
         app.add_system_set(
             SystemSet::on_update(GameState::Playing)
                 .with_system(spawn_enemy_system)
-                .with_system(move_enemy_system)
-                .with_system(map_enemy_world_position.after(move_enemy_system))
-                .with_system(enemy_attack_system.after(map_enemy_world_position))
-                .with_system(enemy_attack_move_system.after(enemy_attack_system))
-                .with_system(enemy_attack_damage_system.after(enemy_attack_move_system)),
+                // .with_system(move_enemy_system)
+                .with_system(enemy_movement_system)
+                .with_system(map_enemy_world_position.after(enemy_movement_system))
+                .with_system(enemy_state_management_system)
+                .with_system(enemy_attack_system)
+                .with_system(enemy_attack_animation_system)
+                .with_system(enemy_attack_damage_system)
+                .with_system(enemy_attack_move_system),
         )
         .add_system_set(
             SystemSet::on_exit(GameState::Playing)
@@ -40,8 +44,56 @@ impl Plugin for EnemyPlugin {
 
 #[derive(Component)]
 pub struct Enemy {
+    decision_timer: Timer,
+    atk_anim_timer: Timer,
     move_timer: Timer,
-    attack_timer: Timer,
+}
+
+impl Enemy {
+    fn reset_decision_timer(&mut self) {
+        let mut rng = rand::thread_rng();
+
+        self.decision_timer = Timer::from_seconds(
+            rng.gen_range(ENEMY_DECISION_TIME_MIN..ENEMY_DECISION_TIME_MAX),
+            TimerMode::Once,
+        );
+    }
+
+    fn reset_attack_animation_timer(&mut self) {
+        self.atk_anim_timer = Timer::from_seconds(0.75, TimerMode::Once);
+    }
+}
+
+impl From<EnemyType> for Enemy {
+    fn from(enemy_type: EnemyType) -> Self {
+        let mut rng = rand::thread_rng();
+
+        match enemy_type {
+            EnemyType::Wizard => Enemy {
+                decision_timer: Timer::from_seconds(
+                    rng.gen_range(ENEMY_DECISION_TIME_MIN..ENEMY_DECISION_TIME_MAX),
+                    TimerMode::Once,
+                ),
+                atk_anim_timer: Timer::from_seconds(0.5, TimerMode::Once),
+                move_timer: Timer::from_seconds(0.25, TimerMode::Repeating),
+            },
+        }
+    }
+}
+
+#[derive(Component)]
+enum EnemyType {
+    Wizard,
+}
+
+#[derive(Bundle)]
+struct EnemyBundle {
+    enemy: Enemy,
+    sprite_sheet: SpriteSheetBundle,
+    enemy_type: EnemyType,
+    position: Position,
+    target: Target,
+    state: EnemyState,
 }
 
 #[derive(Component)]
@@ -49,23 +101,52 @@ struct EnemyAttack {
     direction: Vec2,
 }
 
-impl Enemy {
-    fn will_move(&mut self, time: &Res<Time>) -> bool {
-        self.move_timer.tick(time.delta()).just_finished()
+#[derive(Component, PartialEq, Eq, Clone, Debug)]
+enum EnemyState {
+    Idle,
+    AttackAnimation,
+    Attacking,
+    Moving,
+}
+
+impl EnemyState {
+    fn is_attack_animation(&self) -> bool {
+        *self == EnemyState::AttackAnimation
     }
 
-    fn will_attack(&mut self, time: &Res<Time>) -> bool {
-        self.attack_timer.tick(time.delta()).just_finished()
+    fn is_attacking(&self) -> bool {
+        *self == EnemyState::Attacking
     }
 
-    fn reset_attack_timer(&mut self) {
+    fn is_moving(&self) -> bool {
+        *self == EnemyState::Moving
+    }
+
+    fn is_idle(&self) -> bool {
+        *self == EnemyState::Idle
+    }
+
+    fn to_idle(&mut self) {
+        *self = EnemyState::Idle;
+    }
+
+    fn to_attacking(&mut self) {
+        *self = EnemyState::Attacking;
+    }
+
+    fn randomize() -> Self {
         let mut rng = rand::thread_rng();
-        self.attack_timer = Timer::from_seconds(
-            rng.gen_range(ENEMY_ATTACK_TIME_MIN..ENEMY_ATTACK_TIME_MAX),
-            TimerMode::Once,
-        );
+        let states = [
+            EnemyState::Idle,
+            EnemyState::AttackAnimation,
+            EnemyState::Moving,
+        ];
+        states.choose(&mut rng).unwrap().clone()
     }
 }
+
+#[derive(Component, Deref, DerefMut)]
+struct Target(Option<Position>);
 
 fn spawn_enemy_system(
     mut commands: Commands,
@@ -81,8 +162,9 @@ fn spawn_enemy_system(
     let x = rng.gen_range(-LEVEL_SIZE..LEVEL_SIZE);
     let y = rng.gen_range(-LEVEL_SIZE..LEVEL_SIZE);
 
-    commands.spawn((
-        SpriteSheetBundle {
+    commands.spawn(EnemyBundle {
+        enemy: Enemy::from(EnemyType::Wizard),
+        sprite_sheet: SpriteSheetBundle {
             texture_atlas: assets.wizard_sheet.clone(),
             transform: Transform::from_xyz(x as f32, y as f32, 1.0),
             sprite: TextureAtlasSprite {
@@ -91,42 +173,42 @@ fn spawn_enemy_system(
             },
             ..default()
         },
-        Enemy {
-            move_timer: Timer::from_seconds(ENEMY_MOVE_TIME, TimerMode::Repeating),
-            attack_timer: Timer::from_seconds(
-                rng.gen_range(ENEMY_ATTACK_TIME_MIN..ENEMY_ATTACK_TIME_MAX),
-                TimerMode::Once,
-            ),
-        },
-        Position { x, y },
-    ));
+        enemy_type: EnemyType::Wizard,
+        position: Position { x, y },
+        target: Target(None),
+        state: EnemyState::Idle,
+    });
 }
 
-// TODO: Make this a lot smarter. Right now it's just random movement.
-// There is a pathfinding crate that could be used.
-fn move_enemy_system(
+fn enemy_state_management_system(
     time: Res<Time>,
-    mut enemy_query: Query<(&mut Enemy, &mut Position), With<Enemy>>,
+    audio_assets: Res<AudioAssets>,
+    gameplay_channel: Res<AudioChannel<Gameplay>>,
+    mut enemy_query: Query<(&mut Enemy, &mut EnemyState, &mut TextureAtlasSprite)>,
 ) {
-    let mut rng = rand::thread_rng();
-    for (mut enemy, mut position) in enemy_query.iter_mut() {
-        if !enemy.will_move(&time) {
+    for (mut enemy, mut enemy_state, mut sprite) in enemy_query.iter_mut() {
+        if !enemy_state.is_idle() {
             continue;
         }
 
-        let x = rng.gen_range(-1..=1);
-        let y = rng.gen_range(-1..=1);
-
-        position.x += x;
-        position.y += y;
-
-        while !position.in_world() {
-            let x = rng.gen_range(-1..=1);
-            let y = rng.gen_range(-1..=1);
-
-            position.x += x;
-            position.y += y;
+        if !enemy.decision_timer.tick(time.delta()).just_finished() {
+            continue;
         }
+
+        let new_state = EnemyState::randomize();
+
+        match new_state {
+            EnemyState::Idle => enemy.reset_decision_timer(),
+            EnemyState::AttackAnimation => {
+                sprite.index = 2;
+                gameplay_channel
+                    .play(audio_assets.wizard_prepare.clone())
+                    .with_volume(0.25);
+            }
+            _ => {}
+        }
+
+        *enemy_state = new_state;
     }
 }
 
@@ -138,46 +220,155 @@ fn map_enemy_world_position(mut enemy_query: Query<(&Position, &mut Transform), 
     }
 }
 
-fn enemy_attack_system(
+fn enemy_attack_animation_system(
     time: Res<Time>,
+    mut enemy_query: Query<(&mut Enemy, &mut EnemyState, &mut TextureAtlasSprite)>,
+) {
+    for (mut enemy, mut enemy_state, mut sprite) in enemy_query.iter_mut() {
+        if !enemy_state.is_attack_animation() {
+            continue;
+        }
+
+        if !enemy.atk_anim_timer.tick(time.delta()).just_finished() {
+            continue;
+        }
+
+        enemy_state.to_attacking();
+        enemy.reset_attack_animation_timer();
+        sprite.index = 0;
+    }
+}
+
+fn enemy_attack_system(
     assets: Res<TextureAssets>,
+    audio_assets: Res<AudioAssets>,
+    gameplay_channel: Res<AudioChannel<Gameplay>>,
     segments_query: Query<&Position, With<SnakeSegment>>,
     mut commands: Commands,
-    mut enemy_query: Query<(&mut Enemy, &Transform), With<Enemy>>,
+    mut enemy_query: Query<(&mut Enemy, &mut EnemyState, &EnemyType, &Transform), With<Enemy>>,
 ) {
     let mut rng = rand::thread_rng();
     let segments = segments_query.iter().collect::<Vec<_>>();
     let segment_position = segments.choose(&mut rng).unwrap();
 
-    for (mut enemy, transform) in enemy_query.iter_mut() {
-        if !enemy.will_attack(&time) {
+    for (mut enemy, mut enemy_state, enemy_type, transform) in enemy_query.iter_mut() {
+        if !enemy_state.is_attacking() {
             continue;
         }
 
-        commands.spawn((
-            SpriteSheetBundle {
-                texture_atlas: assets.wizard_sheet.clone(),
-                sprite: TextureAtlasSprite {
-                    custom_size: Some(Vec2::new(0.5, 0.5)),
-                    ..default()
-                },
-                transform: *transform,
-                ..default()
-            },
-            EnemyAttack {
-                direction: Vec2::new(
+        match enemy_type {
+            EnemyType::Wizard => {
+                let mut transform = *transform;
+                let direction = Vec2::new(
                     segment_position.x as f32 - transform.translation.x,
                     segment_position.y as f32 - transform.translation.y,
                 )
-                .normalize(),
-            },
-        ));
+                .normalize();
 
-        enemy.reset_attack_timer();
+                transform.rotate(Quat::from_rotation_z(
+                    Vec2::new(1., 1.).angle_between(direction),
+                ));
+
+                commands.spawn((
+                    SpriteBundle {
+                        texture: assets.projectile.clone(),
+                        sprite: Sprite {
+                            custom_size: Some(Vec2::new(0.5, 0.5)),
+                            ..default()
+                        },
+                        transform,
+                        ..default()
+                    },
+                    EnemyAttack { direction },
+                ));
+
+                gameplay_channel.play(audio_assets.wizard_attack.clone());
+            }
+        }
+
+        enemy.reset_decision_timer();
+        enemy_state.to_idle();
     }
 }
 
-// TODO: Destroy off screen ones
+fn enemy_movement_system(
+    time: Res<Time>,
+    mut enemy_query: Query<
+        (
+            &mut Enemy,
+            &mut EnemyState,
+            &EnemyType,
+            &mut Target,
+            &mut Position,
+            &mut TextureAtlasSprite,
+        ),
+        With<Enemy>,
+    >,
+    segments_query: Query<&Position, (With<SnakeSegment>, Without<Enemy>)>,
+) {
+    for (mut enemy, mut enemy_state, enemy_type, mut target, mut position, mut sprite) in
+        enemy_query.iter_mut()
+    {
+        if !enemy_state.is_moving() {
+            continue;
+        }
+
+        if target.is_none() {
+            match enemy_type {
+                EnemyType::Wizard => {
+                    let mut rng = rand::thread_rng();
+                    let x = rng.gen_range(-LEVEL_SIZE..LEVEL_SIZE);
+                    let y = rng.gen_range(-LEVEL_SIZE..LEVEL_SIZE);
+
+                    *target = Target(Some(Position { x, y }));
+                }
+            }
+
+            continue;
+        }
+
+        if !enemy.move_timer.tick(time.delta()).just_finished() {
+            continue;
+        }
+
+        let target_position = target.unwrap();
+
+        if *position == target_position {
+            *target = Target(None);
+            enemy_state.to_idle();
+            enemy.reset_decision_timer();
+            continue;
+        }
+
+        let old_position = position.clone();
+
+        if position.x < target_position.x {
+            position.x += 1;
+            sprite.index = 1;
+        } else if position.x > target_position.x {
+            position.x -= 1;
+            sprite.index = 0;
+        }
+
+        if position.y < target_position.y {
+            position.y += 1;
+        } else if position.y > target_position.y {
+            position.y -= 1;
+        }
+
+        let any_segments_in_position = segments_query
+            .iter()
+            .any(|segment_position| *segment_position == *position);
+
+        if any_segments_in_position {
+            *target = Target(None);
+            *position = old_position;
+            enemy_state.to_idle();
+            enemy.reset_decision_timer();
+        }
+    }
+}
+
 fn enemy_attack_move_system(
     time: Res<Time>,
     mut commands: Commands,
@@ -196,7 +387,13 @@ fn enemy_attack_move_system(
     }
 }
 
+// TODO: There's some weird issue with deleting them and where they update to
+// a frame later. Not really sure why that happens. So I'm just masking it
+// with a stupid effect lmao. It looks kinda stupid but... it works.
 fn enemy_attack_damage_system(
+    assets: Res<TextureAssets>,
+    audio_assets: Res<AudioAssets>,
+    gameplay_channel: Res<AudioChannel<Gameplay>>,
     mut commands: Commands,
     mut enemy_attack_query: Query<(Entity, &Transform), With<EnemyAttack>>,
     mut segments_query: Query<
@@ -204,7 +401,17 @@ fn enemy_attack_damage_system(
         (With<SnakeSegment>, Without<SnakeTail>, Without<SnakeHead>),
     >,
 ) {
-    let last_segment = segments_query.iter_mut().last().unwrap().0;
+    let last_segment_entity = if let Some(last_segment) = segments_query.iter().last() {
+        last_segment.0
+    } else {
+        return;
+    };
+
+    let last_segment_transform = if let Some(last_segment) = segments_query.iter().last() {
+        last_segment.1.clone()
+    } else {
+        return;
+    };
 
     for (_, segment_transform) in segments_query.iter_mut() {
         for (enemy_attack_entity, enemy_attack_transform) in enemy_attack_query.iter_mut() {
@@ -214,7 +421,25 @@ fn enemy_attack_damage_system(
                 < ENEMY_ATTACK_DAMAGE_RADIUS
             {
                 commands.entity(enemy_attack_entity).despawn();
-                commands.entity(last_segment).despawn();
+                commands.entity(last_segment_entity).despawn();
+
+                commands.spawn((
+                    SpriteBundle {
+                        texture: assets.effect.clone(),
+                        transform: last_segment_transform.clone(),
+                        sprite: Sprite {
+                            custom_size: Some(Vec2::new(2.5, 2.5)),
+                            ..default()
+                        },
+                        ..default()
+                    },
+                    GrowEffect {
+                        timer: Timer::from_seconds(0.33, TimerMode::Once),
+                    },
+                ));
+
+                gameplay_channel.play(audio_assets.hit.clone());
+                return;
             }
         }
     }
