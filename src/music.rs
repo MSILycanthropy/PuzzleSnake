@@ -1,6 +1,7 @@
 use crate::{AudioAssets, GameState};
 use bevy::prelude::*;
 use bevy_kira_audio::prelude::*;
+use iyes_loopless::prelude::*;
 use std::time::Duration;
 
 #[derive(Resource)]
@@ -19,12 +20,10 @@ impl Plugin for MusicPlugin {
         app.add_audio_channel::<Menu>()
             .add_audio_channel::<Background>()
             .add_audio_channel::<Gameplay>()
-            .add_system_set(
-                SystemSet::on_enter(GameState::Menu).with_system(play_menu_music_system),
-            )
-            .add_system_set(SystemSet::on_exit(GameState::Menu).with_system(stop_menu_music_system))
-            .add_system_set(SystemSet::on_enter(GameState::Playing).with_system(play_music_system))
-            .add_system_set(SystemSet::on_exit(GameState::Playing).with_system(stop_music_system));
+            .add_enter_system(GameState::Menu, play_menu_music_system)
+            .add_exit_system(GameState::Menu, stop_menu_music_system)
+            .add_enter_system(GameState::Playing, play_music_system)
+            .add_exit_system(GameState::Playing, stop_music_system);
     }
 }
 

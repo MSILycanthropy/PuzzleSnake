@@ -12,14 +12,6 @@ pub mod snake;
 
 pub const SCALE: f32 = 16.0;
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash)]
-pub enum PlayerDirection {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
 pub enum GameState {
     AssetsLoading,
