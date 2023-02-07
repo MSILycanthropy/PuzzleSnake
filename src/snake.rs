@@ -1,47 +1,147 @@
-use bevy::prelude::*;
+use std::{collections::VecDeque, time::Duration};
+
+use bevy::{ecs::system::Command, prelude::*};
 use bevy_kira_audio::prelude::*;
+use iyes_loopless::prelude::*;
 
-use crate::{enemy::Enemy, music::Gameplay, AudioAssets, GameState, Position, TextureAssets};
+use crate::{
+    despawn,
+    enemy::{Enemy, EnemyAttack},
+    music::Gameplay,
+    AudioAssets, GameState, Position, TextureAssets,
+};
 
-#[derive(Component)]
-pub struct Player;
+const SNAKE_TIMESTEP: u64 = 125;
 
-#[derive(Component, Default)]
-pub struct SnakeHead {
-    direction: SnakeDirection,
+pub struct SnakePlugin;
+
+impl Plugin for SnakePlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<Snake>()
+            .init_resource::<Direction>()
+            .add_enter_system(GameState::Playing, reset_snake_system)
+            .add_fixed_timestep(Duration::from_millis(SNAKE_TIMESTEP), "snake")
+            .add_fixed_timestep_system(
+                "snake",
+                0,
+                draw_snake_system
+                    .run_in_state(GameState::Playing)
+                    .after("movement"),
+            )
+            .add_fixed_timestep_system(
+                "snake",
+                0,
+                move_snake_system
+                    .run_in_state(GameState::Playing)
+                    .label("movement"),
+            )
+            .add_system(input_system.run_in_state(GameState::Playing))
+            .add_fixed_timestep_system("snake", 0, growth_system.run_in_state(GameState::Playing))
+            .add_fixed_timestep_system(
+                "snake",
+                0,
+                collision_system
+                    .run_in_state(GameState::Playing)
+                    .after("movement"),
+            )
+            .add_fixed_timestep_system(
+                "snake",
+                0,
+                damage_system
+                    .run_in_state(GameState::Playing)
+                    .after("movement"),
+            )
+            .add_exit_system(GameState::Playing, despawn::<SnakeSegment>)
+            .add_system(
+                (|mut commands: Commands, keyboard_input: Res<Input<KeyCode>>| {
+                    if keyboard_input.just_pressed(KeyCode::Space) {
+                        commands.insert_resource(NextState(GameState::Playing));
+                    }
+                })
+                .run_in_state(GameState::GameOver),
+            );
+    }
 }
-
-#[derive(Component, Default)]
-pub struct SnakeTail;
-
-#[derive(Component, Default)]
-pub struct SnakeSegment;
 
 #[derive(Resource)]
-pub struct SnakeMoveTimer {
-    pub timer: Timer,
+pub struct Snake {
+    pub segments: VecDeque<Position>,
 }
 
-#[derive(Component)]
-pub struct GrowEffect {
-    pub timer: Timer,
+impl Default for Snake {
+    fn default() -> Self {
+        Self {
+            segments: VecDeque::from(vec![
+                Position { x: 0, y: 0 },
+                Position { x: -1, y: 0 },
+                Position { x: -2, y: 0 },
+            ]),
+        }
+    }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash)]
-enum SnakeDirection {
+impl Snake {
+    fn head(&self) -> &Position {
+        self.segments.front().unwrap()
+    }
+
+    fn tail(&self) -> &Position {
+        self.segments.back().unwrap()
+    }
+
+    pub fn damage(&mut self, amount: usize) {
+        for _ in 0..amount {
+            self.segments.pop_back();
+        }
+    }
+
+    pub fn is_dead(&self) -> bool {
+        self.segments.len() <= 3
+    }
+}
+
+struct AddSnakeSegment;
+
+impl Command for AddSnakeSegment {
+    fn write(self, world: &mut World) {
+        let snake = world.get_resource::<Snake>().unwrap().clone();
+        let tail = snake.segments.front().unwrap();
+        let one_before_tail = snake.segments.get(1).unwrap();
+
+        let new_tail = match (tail.x - one_before_tail.x, tail.y - one_before_tail.y) {
+            (1, 0) => Position {
+                x: tail.x - 1,
+                y: tail.y,
+            },
+            (-1, 0) => Position {
+                x: tail.x + 1,
+                y: tail.y,
+            },
+            (0, 1) => Position {
+                x: tail.x,
+                y: tail.y - 1,
+            },
+            (0, -1) => Position {
+                x: tail.x,
+                y: tail.y + 1,
+            },
+            _ => unreachable!(),
+        };
+
+        let mut snake = world.get_resource_mut::<Snake>().unwrap();
+        snake.segments.push_back(new_tail);
+    }
+}
+
+#[derive(Resource, Clone, PartialEq, Eq)]
+pub enum Direction {
     Up,
     Down,
     Left,
     Right,
 }
 
-impl Default for SnakeDirection {
-    fn default() -> Self {
-        Self::Right
-    }
-}
-
-impl SnakeDirection {
+impl Direction {
     fn opposite(&self) -> Self {
         match self {
             Self::Up => Self::Down,
@@ -50,378 +150,217 @@ impl SnakeDirection {
             Self::Right => Self::Left,
         }
     }
+}
 
-    fn from_tuple(tuple: (i32, i32)) -> Result<Self, ()> {
-        match tuple {
-            (0, 1) => Ok(Self::Up),
-            (0, -1) => Ok(Self::Down),
-            (-1, 0) => Ok(Self::Left),
-            (1, 0) => Ok(Self::Right),
-            _ => Err(()),
-        }
+impl Default for Direction {
+    fn default() -> Self {
+        Self::Right
     }
 }
 
-impl Into<Vec3> for SnakeDirection {
-    fn into(self) -> Vec3 {
-        match self {
-            Self::Up => Vec3::new(0.0, 1.0, 0.0),
-            Self::Down => Vec3::new(0.0, -1.0, 0.0),
-            Self::Left => Vec3::new(-1.0, 0.0, 0.0),
-            Self::Right => Vec3::new(1.0, 0.0, 0.0),
-        }
-    }
+#[derive(Component)]
+struct SnakeSegment;
+
+fn reset_snake_system(mut snake: ResMut<Snake>, mut direction: ResMut<Direction>) {
+    *snake = Snake::default();
+    *direction = Direction::default();
 }
 
-#[derive(Resource)]
-pub struct LastTailPosition(pub Option<Position>);
-
-pub fn snake_setup_system(mut commands: Commands, assets: Res<TextureAssets>) {
-    commands.spawn((
-        SpriteBundle {
-            transform: Transform::from_xyz(0.0, 0.0, 1.0),
-            texture: assets.head.clone(),
-            sprite: Sprite {
-                custom_size: Some(Vec2::new(1., 1.)),
-                ..default()
-            },
-            ..default()
-        },
-        SnakeHead::default(),
-        SnakeSegment,
-        Position { x: 0, y: 0 },
-    ));
-
-    for i in 1..=2 {
-        commands.spawn((
-            SpriteBundle {
-                transform: Transform::from_xyz(-(i as f32), 0.0, 1.0),
-                texture: assets.body.clone(),
-                sprite: Sprite {
-                    custom_size: Some(Vec2::new(1., 1.)),
-                    ..default()
-                },
-                ..default()
-            },
-            SnakeSegment,
-            Position { x: -i, y: 0 },
-        ));
-    }
-
-    commands.spawn((
-        SpriteBundle {
-            transform: Transform::from_xyz(-3.0, 0.0, 1.0),
-            texture: assets.tail.clone(),
-            sprite: Sprite {
-                custom_size: Some(Vec2::new(1., 1.)),
-                ..default()
-            },
-            ..default()
-        },
-        SnakeTail::default(),
-        SnakeSegment,
-        Position { x: -3, y: 0 },
-    ));
-
-    commands.insert_resource(SnakeMoveTimer {
-        timer: Timer::from_seconds(0.125, TimerMode::Repeating),
-    });
-    commands.insert_resource(LastTailPosition(None));
-}
-
-pub fn tick_snake_timers(time: Res<Time>, mut timer: ResMut<SnakeMoveTimer>) {
-    timer.timer.tick(time.delta());
-}
-
-pub fn snake_input_system(
-    mut head_query: Query<&mut SnakeHead>,
-    keyboard_input: Res<Input<KeyCode>>,
+fn draw_snake_system(
+    snake: Res<Snake>,
+    mut commands: Commands,
+    assets: Res<TextureAssets>,
+    segment_entities: Query<Entity, With<SnakeSegment>>,
 ) {
-    let mut head = head_query.single_mut();
+    for entity in segment_entities.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
 
-    let mut dir = head.direction;
+    snake.segments.iter().enumerate().for_each(|(i, x)| {
+        if x == snake.head() {
+            draw_snake_head(&mut commands, &assets, &snake);
+        } else if x == snake.tail() {
+            draw_snake_tail(&mut commands, &assets, &snake);
+        } else {
+            draw_snake_body(&mut commands, &assets, &snake, i);
+        }
+    });
+}
+
+fn draw_snake_head(commands: &mut Commands, assets: &Res<TextureAssets>, snake: &Snake) {
+    let head = snake.head();
+    let mut transform = Transform::from_xyz(head.x as f32, head.y as f32, 1.);
+
+    let (x, y) = (head.x - snake.segments[1].x, head.y - snake.segments[1].y);
+    let rotation = match (x, y) {
+        (1, 0) => -std::f32::consts::FRAC_PI_2,
+        (-1, 0) => std::f32::consts::FRAC_PI_2,
+        (0, 1) => 0.,
+        (0, -1) => std::f32::consts::PI,
+        _ => 0.,
+    };
+
+    transform.rotate(Quat::from_rotation_z(rotation));
+
+    commands.spawn((
+        SpriteBundle {
+            texture: assets.head.clone(),
+            transform,
+            sprite: Sprite {
+                custom_size: Some(Vec2::new(1., 1.)),
+                ..default()
+            },
+            ..default()
+        },
+        SnakeSegment,
+    ));
+}
+
+fn draw_snake_tail(commands: &mut Commands, assets: &Res<TextureAssets>, snake: &Snake) {
+    let tail = snake.tail();
+    let mut transform = Transform::from_xyz(tail.x as f32, tail.y as f32, 1.);
+
+    let (x, y) = (
+        tail.x - snake.segments[snake.segments.len() - 2].x,
+        tail.y - snake.segments[snake.segments.len() - 2].y,
+    );
+    let rotation = match (x, y) {
+        (1, 0) => std::f32::consts::FRAC_PI_2,
+        (-1, 0) => -std::f32::consts::FRAC_PI_2,
+        (0, 1) => std::f32::consts::PI,
+        _ => 0.,
+    };
+
+    transform.rotate(Quat::from_rotation_z(rotation));
+
+    commands.spawn((
+        SpriteBundle {
+            texture: assets.tail.clone(),
+            transform,
+            sprite: Sprite {
+                custom_size: Some(Vec2::new(1., 1.)),
+                ..default()
+            },
+            ..default()
+        },
+        SnakeSegment,
+    ));
+}
+
+fn draw_snake_body(
+    commands: &mut Commands,
+    assets: &Res<TextureAssets>,
+    snake: &Snake,
+    current_index: usize,
+) {
+    let current_segment = &snake.segments[current_index];
+    let previous_segment = &snake.segments[current_index - 1];
+    let next_segment = &snake.segments[current_index + 1];
+
+    let mut transform = Transform::from_xyz(current_segment.x as f32, current_segment.y as f32, 1.);
+
+    let previous_offset = Position {
+        x: previous_segment.x - current_segment.x,
+        y: previous_segment.y - current_segment.y,
+    };
+
+    let next_offset = Position {
+        x: next_segment.x - current_segment.x,
+        y: next_segment.y - current_segment.y,
+    };
+
+    let rotation = if previous_offset.x == next_offset.x {
+        0.
+    } else if previous_offset.y == next_offset.y {
+        std::f32::consts::FRAC_PI_2
+    } else {
+        if (previous_offset.x == -1 && next_offset.y == -1)
+            || (previous_offset.y == -1 && next_offset.x == -1)
+        {
+            -std::f32::consts::FRAC_PI_2
+        } else if (previous_offset.x == -1 && next_offset.y == 1)
+            || (previous_offset.y == 1 && next_offset.x == -1)
+        {
+            std::f32::consts::PI
+        } else if (previous_offset.x == 1 && next_offset.y == -1)
+            || (previous_offset.y == -1 && next_offset.x == 1)
+        {
+            0.
+        } else {
+            std::f32::consts::FRAC_PI_2
+        }
+    };
+
+    let texture = if previous_offset.x == next_offset.x || previous_offset.y == next_offset.y {
+        assets.body.clone()
+    } else {
+        assets.body_corner.clone()
+    };
+
+    transform.rotate(Quat::from_rotation_z(rotation));
+
+    commands.spawn((
+        SpriteBundle {
+            texture,
+            transform,
+            sprite: Sprite {
+                custom_size: Some(Vec2::new(1., 1.)),
+                ..default()
+            },
+            ..default()
+        },
+        SnakeSegment,
+    ));
+}
+
+fn move_snake_system(mut snake: ResMut<Snake>, direction: Res<Direction>) {
+    let mut new_head = snake.head().clone();
+
+    match *direction {
+        Direction::Up => new_head.y += 1,
+        Direction::Down => new_head.y -= 1,
+        Direction::Left => new_head.x -= 1,
+        Direction::Right => new_head.x += 1,
+    }
+
+    snake.segments.push_front(new_head);
+    snake.segments.pop_back();
+}
+
+fn input_system(keyboard_input: Res<Input<KeyCode>>, mut direction: ResMut<Direction>) {
+    let mut new_direction = direction.clone();
 
     if keyboard_input.pressed(KeyCode::W) {
-        dir = SnakeDirection::Up;
+        new_direction = Direction::Up;
     }
-
     if keyboard_input.pressed(KeyCode::S) {
-        dir = SnakeDirection::Down;
+        new_direction = Direction::Down;
     }
-
     if keyboard_input.pressed(KeyCode::A) {
-        dir = SnakeDirection::Left;
+        new_direction = Direction::Left;
     }
-
     if keyboard_input.pressed(KeyCode::D) {
-        dir = SnakeDirection::Right;
+        new_direction = Direction::Right;
     }
 
-    if dir != head.direction.opposite() {
-        head.direction = dir;
-    }
-}
-
-pub fn snake_movement_system(
-    move_timer: Res<SnakeMoveTimer>,
-    mut last_tail_position: ResMut<LastTailPosition>,
-    mut head_query: Query<(&mut Position, &SnakeHead)>,
-    mut segments_query: Query<&mut Position, (With<SnakeSegment>, Without<SnakeHead>)>,
-) {
-    if !move_timer.timer.just_finished() {
-        return;
-    }
-
-    let (mut head_position, head) = head_query.single_mut();
-
-    let mut last_position = *head_position;
-
-    match &head.direction {
-        SnakeDirection::Up => {
-            head_position.y += 1;
-        }
-        SnakeDirection::Down => {
-            head_position.y -= 1;
-        }
-        SnakeDirection::Left => {
-            head_position.x -= 1;
-        }
-        SnakeDirection::Right => {
-            head_position.x += 1;
-        }
-    }
-
-    for mut segment_position in segments_query.iter_mut() {
-        std::mem::swap(&mut last_position, &mut segment_position);
-    }
-
-    last_tail_position.0 = Some(last_position);
-}
-
-pub fn snake_position_lerp_system(
-    move_timer: Res<SnakeMoveTimer>,
-    mut position_query: Query<(&mut Transform, &Position), With<SnakeSegment>>,
-) {
-    if !move_timer.timer.just_finished() {
-        return;
-    }
-
-    for (mut transform, position) in position_query.iter_mut() {
-        transform.translation = Vec3::new(
-            position.x as f32,
-            position.y as f32,
-            transform.translation.z,
-        );
+    if new_direction != direction.opposite() {
+        *direction = new_direction;
     }
 }
 
-pub fn rotate_snake_head_system(
-    timer: Res<SnakeMoveTimer>,
-    mut head_query: Query<(&mut Transform, &SnakeHead)>,
-) {
-    if !timer.timer.just_finished() {
-        return;
-    }
-
-    let (mut transform, head) = head_query.single_mut();
-
-    match &head.direction {
-        SnakeDirection::Up => {
-            transform.rotation = Quat::from_rotation_z(0.);
-        }
-        SnakeDirection::Down => {
-            transform.rotation = Quat::from_rotation_z(std::f32::consts::PI);
-        }
-        SnakeDirection::Left => {
-            transform.rotation = Quat::from_rotation_z(std::f32::consts::PI / 2.);
-        }
-        SnakeDirection::Right => {
-            transform.rotation = Quat::from_rotation_z(-std::f32::consts::PI / 2.);
-        }
-    }
-}
-
-pub fn rotate_snake_tail_system(
-    mut tail_query: Query<(&Position, &mut Transform, &SnakeTail)>,
-    mut segments_query: Query<
-        &Position,
-        (With<SnakeSegment>, Without<SnakeHead>, Without<SnakeTail>),
-    >,
-) {
-    let mut tail = tail_query.iter_mut().next().unwrap();
-
-    let last_segment = if let Some(last_segment) = segments_query.iter_mut().last() {
-        last_segment
-    } else {
-        return;
-    };
-
-    let (tail_x, tail_y) = (tail.0.x, tail.0.y);
-    let (last_segment_x, last_segment_y) = (last_segment.x, last_segment.y);
-
-    let (dx, dy) = (tail_x - last_segment_x, tail_y - last_segment_y);
-
-    let rotation = match (dx, dy) {
-        (0, 1) => Quat::from_rotation_z(std::f32::consts::PI),
-        (0, -1) => Quat::from_rotation_z(0.),
-        (1, 0) => Quat::from_rotation_z(std::f32::consts::PI / 2.),
-        (-1, 0) => Quat::from_rotation_z(-std::f32::consts::PI / 2.),
-        _ => Quat::from_rotation_z(0.),
-    };
-
-    tail.1.rotation = rotation;
-}
-
-pub fn swap_snake_sprites_system(
-    assets: Res<TextureAssets>,
-    mut segments_query: Query<(&Position, &mut Handle<Image>, &mut Transform), With<SnakeSegment>>,
-) {
-    // Oh my god this is incredibly dumb.
-    let segments_vec = segments_query.iter_mut().collect::<Vec<_>>();
-    let asset_rotation_map = segments_vec
-        .iter()
-        .map(|(pos, _, _)| *pos)
-        .collect::<Vec<_>>()
-        .iter()
-        .enumerate()
-        .collect::<Vec<_>>()
-        .windows(3)
-        .map(|window| {
-            let (_, seg1_pos) = window[0];
-            let (i2, seg2_pos) = window[1];
-            let (_, seg3_pos) = window[2];
-
-            let asset = if seg3_pos.x != seg1_pos.x && seg3_pos.y != seg1_pos.y {
-                assets.body_corner.clone()
-            } else {
-                assets.body.clone()
-            };
-
-            let slope = (seg3_pos.y - seg1_pos.y) as f32 / (seg3_pos.x - seg1_pos.x) as f32;
-            let rotation = if seg3_pos.x != seg1_pos.x && seg3_pos.y != seg1_pos.y {
-                let tuple = (seg2_pos.x - seg3_pos.x, seg2_pos.y - seg3_pos.y);
-                let direction = SnakeDirection::from_tuple(tuple);
-
-                if let Ok(direction) = direction {
-                    snake_direction_to_rotation(direction, slope)
-                } else {
-                    0.
-                }
-            } else {
-                let tuple = (seg2_pos.x - seg3_pos.x, seg2_pos.y - seg3_pos.y);
-                let direction = SnakeDirection::from_tuple(tuple);
-
-                if let Ok(direction) = direction {
-                    match direction {
-                        SnakeDirection::Up => 0.,
-                        SnakeDirection::Down => std::f32::consts::PI,
-                        SnakeDirection::Left => std::f32::consts::PI / 2.,
-                        SnakeDirection::Right => -std::f32::consts::PI / 2.,
-                    }
-                } else {
-                    0.
-                }
-            };
-
-            (i2, asset, rotation)
-        })
-        .collect::<Vec<_>>();
-
-    for (i, (_, mut handle, mut transform)) in segments_query.iter_mut().enumerate() {
-        if let Some((_, asset, corner_rotation)) =
-            asset_rotation_map.iter().find(|(i2, _, _)| i2 == &i)
-        {
-            *handle = asset.clone();
-            transform.rotation = Quat::from_rotation_z(*corner_rotation);
-        }
-    }
-}
-
-fn snake_direction_to_rotation(direction: SnakeDirection, slope: f32) -> f32 {
-    match direction {
-        SnakeDirection::Up => {
-            if slope > 0. {
-                0.
-            } else {
-                -std::f32::consts::PI / 2.
-            }
-        }
-        SnakeDirection::Down => {
-            if slope > 0. {
-                std::f32::consts::PI
-            } else {
-                std::f32::consts::PI / 2.
-            }
-        }
-        SnakeDirection::Left => {
-            if slope > 0. {
-                0.
-            } else {
-                std::f32::consts::PI / 2.
-            }
-        }
-        SnakeDirection::Right => {
-            if slope > 0. {
-                std::f32::consts::PI
-            } else {
-                -std::f32::consts::PI / 2.
-            }
-        }
-    }
-}
-
-// TODO: Spawn the tail with the correct rotation.
-pub fn snake_growth_system(
+fn growth_system(
     mut commands: Commands,
+    snake: Res<Snake>,
+    enemies: Query<(Entity, &Position), With<Enemy>>,
     audio_assets: Res<AudioAssets>,
     gameplay_channel: Res<AudioChannel<Gameplay>>,
-    move_timer: Res<SnakeMoveTimer>,
-    tail_query: Query<(&Transform, &Position), With<SnakeTail>>,
-    enemy_query: Query<(Entity, &Position), With<Enemy>>,
-    head_query: Query<&Position, With<SnakeHead>>,
-    assets: Res<TextureAssets>,
 ) {
-    if !move_timer.timer.just_finished() {
-        return;
-    }
+    let head = snake.head();
 
-    let head_position = head_query.single();
-
-    for (enemy_entity, enemy_position) in enemy_query.iter() {
-        if enemy_position == head_position {
-            let (transform, position) = tail_query.single();
-
-            // TODO: this line causes a warning in bevy for some reason now?
-            commands.entity(enemy_entity).despawn();
-
-            commands.spawn((
-                SpriteBundle {
-                    texture: assets.body.clone(),
-                    transform: transform.clone(),
-                    sprite: Sprite {
-                        custom_size: Some(Vec2::new(1., 1.)),
-                        ..default()
-                    },
-                    ..default()
-                },
-                SnakeSegment,
-                position.clone(),
-            ));
-
-            commands.spawn((
-                SpriteBundle {
-                    texture: assets.effect.clone(),
-                    transform: transform.clone(),
-                    sprite: Sprite {
-                        custom_size: Some(Vec2::new(2.5, 2.5)),
-                        ..default()
-                    },
-                    ..default()
-                },
-                GrowEffect {
-                    timer: Timer::from_seconds(0.33, TimerMode::Once),
-                },
-            ));
+    for (entity, enemy) in enemies.iter() {
+        if head == enemy {
+            commands.entity(entity).despawn();
+            commands.add(AddSnakeSegment);
 
             gameplay_channel
                 .play(audio_assets.eat.clone())
@@ -430,43 +369,48 @@ pub fn snake_growth_system(
     }
 }
 
-pub fn delete_grow_effect_system(
-    time: Res<Time>,
+fn collision_system(
     mut commands: Commands,
-    mut effect_query: Query<(Entity, &mut GrowEffect)>,
+    snake: Res<Snake>,
+    audio_assets: Res<AudioAssets>,
+    gameplay_channel: Res<AudioChannel<Gameplay>>,
 ) {
-    for (entity, mut enemy) in effect_query.iter_mut() {
-        if enemy.timer.tick(time.delta()).just_finished() {
-            commands.entity(entity).despawn();
+    let head = snake.head();
+
+    let mut kill_snake = || {
+        gameplay_channel.play(audio_assets.death_by_bumping.clone());
+        commands.insert_resource(NextState(GameState::GameOver));
+    };
+
+    if !head.in_world() {
+        kill_snake();
+    }
+
+    for segment in snake.segments.iter().skip(1) {
+        if head == segment {
+            kill_snake();
         }
     }
 }
 
-pub fn snake_death_system(
+fn damage_system(
+    mut commands: Commands,
+    mut snake: ResMut<Snake>,
+    enemy_attacks: Query<(Entity, &Transform), With<EnemyAttack>>,
     audio_assets: Res<AudioAssets>,
     gameplay_channel: Res<AudioChannel<Gameplay>>,
-    segment_query: Query<&Position, (With<SnakeSegment>, Without<SnakeHead>)>,
-    head_query: Query<&Position, With<SnakeHead>>,
-    mut game_state: ResMut<State<GameState>>,
 ) {
-    let segment_count = segment_query.iter().count();
+    for (entity, transform) in enemy_attacks.iter() {
+        let enemy_attack_position = Position::from(transform.translation.truncate());
 
-    if segment_count <= 1 {
-        let _ = game_state.set(GameState::GameOver);
-    }
+        if snake.segments.contains(&enemy_attack_position) {
+            snake.damage(1);
+            commands.entity(entity).despawn();
+            gameplay_channel.play(audio_assets.hit.clone());
 
-    let head_position = head_query.single();
-
-    if !head_position.in_world() {
-        let _ = game_state.set(GameState::GameOver);
-
-        gameplay_channel.play(audio_assets.death_by_bumping.clone());
-    }
-
-    for segment_position in segment_query.iter() {
-        if segment_position == head_position {
-            let _ = game_state.set(GameState::GameOver);
-            gameplay_channel.play(audio_assets.death_by_bumping.clone());
+            if snake.is_dead() {
+                commands.insert_resource(NextState(GameState::GameOver));
+            }
         }
     }
 }

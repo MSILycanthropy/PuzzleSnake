@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use iyes_loopless::prelude::*;
 
 use crate::{despawn, GameState};
 
@@ -12,10 +13,10 @@ enum MenuState {
 }
 
 #[derive(Component)]
-enum MenuAction {
-    Play,
-    Exit,
-}
+struct PlayButton;
+
+#[derive(Component)]
+struct ExitButton;
 
 #[derive(Component)]
 struct OnMenu;
@@ -24,18 +25,17 @@ pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_state(MenuState::Main)
-            .add_system_set(SystemSet::on_enter(GameState::Menu).with_system(menu_setup_system))
+        app.add_loopless_state(MenuState::Main)
+            .add_enter_system(MenuState::Main, main_menu_setup_system)
             .add_system_set(
-                SystemSet::on_enter(MenuState::Main).with_system(main_menu_setup_system),
+                ConditionSet::new()
+                    .run_in_state(MenuState::Main)
+                    .with_system(button_play.run_if(button_interacted::<PlayButton>))
+                    .with_system(button_exit.run_if(button_interacted::<ExitButton>))
+                    .into(),
             )
-            .add_system_set(SystemSet::on_update(GameState::Menu).with_system(menu_action_system))
-            .add_system_set(SystemSet::on_exit(GameState::Menu).with_system(despawn::<OnMenu>));
+            .add_exit_system(MenuState::Main, despawn::<OnMenu>);
     }
-}
-
-fn menu_setup_system(mut menu_state: ResMut<State<MenuState>>) {
-    let _ = menu_state.set(MenuState::Main);
 }
 
 fn main_menu_setup_system(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -65,7 +65,7 @@ fn main_menu_setup_system(mut commands: Commands, asset_server: Res<AssetServer>
                         },
                         ..default()
                     },
-                    MenuAction::Play,
+                    PlayButton,
                 ))
                 .with_children(|parent| {
                     parent.spawn(TextBundle::from_section(
@@ -95,7 +95,7 @@ fn main_menu_setup_system(mut commands: Commands, asset_server: Res<AssetServer>
                         },
                         ..default()
                     },
-                    MenuAction::Exit,
+                    ExitButton,
                 ))
                 .with_children(|parent| {
                     parent.spawn(TextBundle::from_section(
@@ -110,21 +110,19 @@ fn main_menu_setup_system(mut commands: Commands, asset_server: Res<AssetServer>
         });
 }
 
-fn menu_action_system(
-    query: Query<(&Interaction, &MenuAction), (Changed<Interaction>, With<Button>)>,
-    mut menu_state: ResMut<State<MenuState>>,
-    mut game_state: ResMut<State<GameState>>,
-    mut app_exit_events: ResMut<Events<bevy::app::AppExit>>,
-) {
-    for (interaction, action) in query.iter() {
-        if *interaction == Interaction::Clicked {
-            match action {
-                MenuAction::Play => {
-                    let _ = menu_state.set(MenuState::Disabled);
-                    let _ = game_state.set(GameState::Playing);
-                }
-                MenuAction::Exit => app_exit_events.send(bevy::app::AppExit),
-            }
-        }
-    }
+fn button_interacted<T: Component>(
+    query: Query<&Interaction, (Changed<Interaction>, With<Button>, With<T>)>,
+) -> bool {
+    query
+        .iter()
+        .any(|interaction| *interaction == Interaction::Clicked)
+}
+
+fn button_play(mut commands: Commands) {
+    commands.insert_resource(NextState(MenuState::Disabled));
+    commands.insert_resource(NextState(GameState::Playing));
+}
+
+fn button_exit(mut app_exit_events: ResMut<Events<bevy::app::AppExit>>) {
+    app_exit_events.send(bevy::app::AppExit);
 }

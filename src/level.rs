@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use iyes_loopless::prelude::*;
 
 use crate::{despawn, GameState, TextureAssets};
 
@@ -11,8 +12,8 @@ pub struct LevelPlugin;
 
 impl Plugin for LevelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set(SystemSet::on_enter(GameState::Playing).with_system(level_setup_system))
-            .add_system_set(SystemSet::on_exit(GameState::Playing).with_system(despawn::<Level>));
+        app.add_enter_system(GameState::Playing, level_setup_system)
+            .add_exit_system(GameState::Playing, despawn::<Level>);
     }
 }
 
