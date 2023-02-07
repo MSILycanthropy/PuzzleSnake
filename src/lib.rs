@@ -10,7 +10,7 @@ pub mod menu;
 pub mod music;
 pub mod snake;
 
-pub const SCALE: f32 = 16.0;
+pub const SCALE: i32 = 32;
 
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
 pub enum GameState {

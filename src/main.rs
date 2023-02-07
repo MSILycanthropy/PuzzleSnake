@@ -1,7 +1,8 @@
-use bevy::{prelude::*, render::camera::ScalingMode, window::close_on_esc};
+use bevy::{prelude::*, window::close_on_esc};
 use bevy_asset_loader::prelude::*;
 use bevy_framepace::{debug::DiagnosticsPlugin, FramepacePlugin, FramepaceSettings, Limiter};
 use bevy_kira_audio::prelude::*;
+use bevy_pixel_camera::{PixelCameraBundle, PixelCameraPlugin};
 use iyes_loopless::prelude::*;
 use super_snake::{game::GamePlugin, AudioAssets, GameState, TextureAssets, SCALE};
 
@@ -32,6 +33,7 @@ fn main() {
         .add_plugin(FramepacePlugin)
         .add_plugin(DiagnosticsPlugin)
         .add_plugin(AudioPlugin)
+        .add_plugin(PixelCameraPlugin)
         .add_plugin(GamePlugin);
 
     app.run()
@@ -40,11 +42,7 @@ fn main() {
 fn setup_system(mut commands: Commands, mut settings: ResMut<FramepaceSettings>) {
     settings.limiter = Limiter::from_framerate(60.);
 
-    let mut camera = Camera2dBundle::default();
-    camera.projection.scaling_mode = ScalingMode::Auto {
-        min_height: SCALE * 2.0,
-        min_width: SCALE * 2.0,
-    };
+    let camera = PixelCameraBundle::from_zoom(SCALE);
 
     commands.spawn(camera);
 }
