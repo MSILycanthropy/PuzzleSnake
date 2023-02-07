@@ -8,7 +8,7 @@ use crate::{
     despawn,
     enemy::{Enemy, EnemyAttack},
     music::Gameplay,
-    AudioAssets, GameState, Position, TextureAssets,
+    AudioAssets, DestroyAfter, GameState, Position, TextureAssets,
 };
 
 const SNAKE_TIMESTEP: u64 = 125;
@@ -397,16 +397,36 @@ fn damage_system(
     mut commands: Commands,
     mut snake: ResMut<Snake>,
     enemy_attacks: Query<(Entity, &Transform), With<EnemyAttack>>,
+    texture_assets: Res<TextureAssets>,
     audio_assets: Res<AudioAssets>,
     gameplay_channel: Res<AudioChannel<Gameplay>>,
 ) {
     for (entity, transform) in enemy_attacks.iter() {
-        let enemy_attack_position = Position::from(transform.translation.truncate());
+        let transform_to_check =
+            transform.translation + (Vec3::new(0.5, 0.5, 0.) * transform.rotation.to_scaled_axis());
+        let enemy_attack_position = Position::from(transform_to_check.truncate());
 
         if snake.segments.contains(&enemy_attack_position) {
             snake.damage(1);
             commands.entity(entity).despawn();
             gameplay_channel.play(audio_assets.hit.clone());
+
+            commands.spawn((
+                SpriteBundle {
+                    texture: texture_assets.effect.clone(),
+                    transform: Transform::from_xyz(
+                        enemy_attack_position.x as f32,
+                        enemy_attack_position.y as f32,
+                        2.,
+                    ),
+                    sprite: Sprite {
+                        custom_size: Some(Vec2::new(2., 2.)),
+                        ..default()
+                    },
+                    ..default()
+                },
+                DestroyAfter(Timer::from_seconds(0.25, TimerMode::Once)),
+            ));
 
             if snake.is_dead() {
                 commands.insert_resource(NextState(GameState::GameOver));

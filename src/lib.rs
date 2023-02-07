@@ -8,6 +8,7 @@ pub mod game;
 pub mod level;
 pub mod menu;
 pub mod music;
+pub mod score;
 pub mod snake;
 
 pub const SCALE: i32 = 32;
@@ -47,6 +48,9 @@ impl From<Vec2> for Position {
         }
     }
 }
+
+#[derive(Component, Deref, DerefMut)]
+pub struct DestroyAfter(Timer);
 
 #[derive(AssetCollection, Resource)]
 pub struct TextureAssets {
@@ -99,6 +103,18 @@ pub struct AudioAssets {
 pub fn despawn<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands: Commands) {
     for entity in to_despawn.iter() {
         commands.entity(entity).despawn_recursive();
+    }
+}
+
+pub fn despawn_after(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut DestroyAfter)>,
+    time: Res<Time>,
+) {
+    for (entity, mut destroy_after) in query.iter_mut() {
+        if destroy_after.tick(time.delta()).just_finished() {
+            commands.entity(entity).despawn_recursive();
+        }
     }
 }
 

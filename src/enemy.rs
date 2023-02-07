@@ -11,26 +11,36 @@ use crate::{
 const MAX_ENEMIES: usize = 1;
 const ENEMY_DECISION_TIME_MIN: f32 = 0.5;
 const ENEMY_DECISION_TIME_MAX: f32 = 1.5;
-const ENEMY_ATTACK_SPEED: f32 = 3.0;
+const ENEMY_ATTACK_SPEED: f32 = 5.0;
 
 pub struct EnemyPlugin;
 
 impl Plugin for EnemyPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set(
-            ConditionSet::new()
-                .run_in_state(GameState::Playing)
-                .with_system(spawn_enemy_system)
-                .with_system(enemy_state_management_system)
-                .with_system(move_enemy_system)
-                .with_system(map_enemy_position)
-                .with_system(enemy_attack_animation_system)
-                .with_system(enemy_attack_system)
-                .with_system(enemy_attack_move_system)
-                .into(),
-        )
-        .add_exit_system(GameState::Playing, despawn::<Enemy>)
-        .add_exit_system(GameState::Playing, despawn::<EnemyAttack>);
+        app.init_resource::<MaxEnemies>()
+            .add_system_set(
+                ConditionSet::new()
+                    .run_in_state(GameState::Playing)
+                    .with_system(spawn_enemy_system)
+                    .with_system(enemy_state_management_system)
+                    .with_system(move_enemy_system)
+                    .with_system(map_enemy_position)
+                    .with_system(enemy_attack_animation_system)
+                    .with_system(enemy_attack_system)
+                    .with_system(enemy_attack_move_system)
+                    .into(),
+            )
+            .add_exit_system(GameState::Playing, despawn::<Enemy>)
+            .add_exit_system(GameState::Playing, despawn::<EnemyAttack>);
+    }
+}
+
+#[derive(Resource, Deref, DerefMut)]
+pub struct MaxEnemies(pub usize);
+
+impl Default for MaxEnemies {
+    fn default() -> Self {
+        MaxEnemies(MAX_ENEMIES)
     }
 }
 
@@ -173,10 +183,14 @@ fn random_position() -> Position {
     Position { x, y }
 }
 
-fn spawn_enemy_system(mut commands: Commands, enemies: Query<&Enemy>) {
+fn spawn_enemy_system(
+    mut commands: Commands,
+    enemies: Query<&Enemy>,
+    max_enemies: Res<MaxEnemies>,
+) {
     let enemies_count = enemies.iter().count();
 
-    if enemies_count >= MAX_ENEMIES {
+    if enemies_count >= max_enemies.0 {
         return;
     }
 
