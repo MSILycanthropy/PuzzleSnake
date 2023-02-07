@@ -4,7 +4,7 @@ use bevy_framepace::{debug::DiagnosticsPlugin, FramepacePlugin, FramepaceSetting
 use bevy_kira_audio::prelude::*;
 use bevy_pixel_camera::{PixelCameraBundle, PixelCameraPlugin};
 use iyes_loopless::prelude::*;
-use super_snake::{game::GamePlugin, AudioAssets, GameState, TextureAssets, SCALE};
+use super_snake::{despawn_after, game::GamePlugin, AudioAssets, GameState, TextureAssets, SCALE};
 
 fn main() {
     let mut app = App::new();
@@ -18,6 +18,7 @@ fn main() {
         )
         .add_startup_system(setup_system)
         .add_system(close_on_esc)
+        .add_system(despawn_after)
         .add_plugins(
             DefaultPlugins
                 .set(ImagePlugin::default_nearest())
