@@ -14,6 +14,9 @@ struct ScoreDisplay;
 #[derive(Component)]
 struct ScoreText;
 
+#[derive(Component)]
+struct PlayButton;
+
 pub struct ScorePlugin;
 
 impl Plugin for ScorePlugin {
@@ -29,6 +32,12 @@ impl Plugin for ScorePlugin {
             )
             .add_exit_system(GameState::Playing, despawn::<ScoreDisplay>)
             .add_enter_system(GameState::GameOver, spawn_game_over)
+            .add_system_set(
+                ConditionSet::new()
+                    .run_in_state(GameState::GameOver)
+                    .with_system(button_play.run_if(button_interacted::<PlayButton>))
+                    .into(),
+            )
             .add_exit_system(GameState::GameOver, despawn::<ScoreDisplay>);
     }
 }
@@ -89,9 +98,10 @@ fn spawn_game_over(score: Res<Score>, mut commands: Commands, asset_server: Res<
         .spawn((
             NodeBundle {
                 style: Style {
-                    size: Size::new(Val::Percent(100.), Val::Percent(100.)),
+                    size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
+                    flex_direction: FlexDirection::Column,
                     ..default()
                 },
                 ..default()
@@ -110,5 +120,42 @@ fn spawn_game_over(score: Res<Score>, mut commands: Commands, asset_server: Res<
                 ),
                 ScoreText,
             ));
+
+            parent
+            .spawn((
+                ButtonBundle {
+                    style: Style {
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        size: Size::new(Val::Px(200.), Val::Px(80.)),
+                        margin: UiRect {
+                            left: Val::Px(0.),
+                            right: Val::Px(0.),
+                            top: Val::Px(10.),
+                            bottom: Val::Px(0.),
+                        },
+                        ..default()
+                    },
+                    image: UiImage {
+                        0: asset_server.load("sprites/start_button.png")
+                    },
+                    ..default()
+                },
+                PlayButton,
+            ));
         });
+}
+
+
+fn button_interacted<T: Component>(
+    query: Query<&Interaction, (Changed<Interaction>, With<Button>, With<T>)>,
+) -> bool {
+    query
+        .iter()
+        .any(|interaction| *interaction == Interaction::Clicked)
+}
+
+fn button_play(mut commands: Commands) {
+    // commands.insert_resource(NextState(::Disabled));
+    commands.insert_resource(NextState(GameState::Playing));
 }
