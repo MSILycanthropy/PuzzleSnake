@@ -330,16 +330,16 @@ fn move_snake_system(mut snake: ResMut<Snake>, direction: Res<Direction>) {
 fn input_system(keyboard_input: Res<Input<KeyCode>>, mut direction: ResMut<Direction>) {
     let mut new_direction = direction.clone();
 
-    if keyboard_input.pressed(KeyCode::W) {
+    if keyboard_input.pressed(KeyCode::W) | keyboard_input.pressed(KeyCode::Up) {
         new_direction = Direction::Up;
     }
-    if keyboard_input.pressed(KeyCode::S) {
+    if keyboard_input.pressed(KeyCode::S) | keyboard_input.pressed(KeyCode::Down) {
         new_direction = Direction::Down;
     }
-    if keyboard_input.pressed(KeyCode::A) {
+    if keyboard_input.pressed(KeyCode::A) | keyboard_input.pressed(KeyCode::Left) {
         new_direction = Direction::Left;
     }
-    if keyboard_input.pressed(KeyCode::D) {
+    if keyboard_input.pressed(KeyCode::D) | keyboard_input.pressed(KeyCode::Right) {
         new_direction = Direction::Right;
     }
 
