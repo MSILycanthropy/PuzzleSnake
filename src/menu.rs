@@ -3,7 +3,7 @@ use iyes_loopless::prelude::*;
 
 use crate::{despawn, GameState};
 
-const MENU_FONT: &str = "fonts/impact.ttf";
+// const MENU_FONT: &str = "fonts/impact.ttf";
 
 // TODO: More menus :)
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
@@ -60,23 +60,16 @@ fn main_menu_setup_system(mut commands: Commands, asset_server: Res<AssetServer>
                         style: Style {
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
-                            size: Size::new(Val::Px(200.0), Val::Px(50.0)),
+                            size: Size::new(Val::Px(200.0), Val::Px(80.0)),
                             ..default()
+                        },
+                        image: UiImage {
+                            0: asset_server.load("sprites/start_button.png")
                         },
                         ..default()
                     },
                     PlayButton,
-                ))
-                .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "Play",
-                        TextStyle {
-                            font: asset_server.load(MENU_FONT),
-                            font_size: 40.0,
-                            color: Color::BLACK,
-                        },
-                    ));
-                });
+                ));
 
             parent
                 .spawn((
@@ -84,7 +77,7 @@ fn main_menu_setup_system(mut commands: Commands, asset_server: Res<AssetServer>
                         style: Style {
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
-                            size: Size::new(Val::Px(200.), Val::Px(50.)),
+                            size: Size::new(Val::Px(200.), Val::Px(80.)),
                             margin: UiRect {
                                 left: Val::Px(0.),
                                 right: Val::Px(0.),
@@ -93,20 +86,13 @@ fn main_menu_setup_system(mut commands: Commands, asset_server: Res<AssetServer>
                             },
                             ..default()
                         },
+                        image: UiImage {
+                            0: asset_server.load("sprites/exit_button.png")
+                        },
                         ..default()
                     },
                     ExitButton,
-                ))
-                .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "Exit",
-                        TextStyle {
-                            font: asset_server.load(MENU_FONT),
-                            font_size: 40.0,
-                            color: Color::BLACK,
-                        },
-                    ));
-                });
+                ));
         });
 }
 
