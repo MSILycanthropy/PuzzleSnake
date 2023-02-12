@@ -64,6 +64,7 @@ impl Enemy {
     fn reset_attack_animation_timer(&mut self, enemy_type: &EnemyType) {
         let time = match enemy_type {
             EnemyType::Wizard => 0.5,
+            EnemyType::Knight => 2.5,
         };
 
         self.atk_anim_timer = Timer::from_seconds(time, TimerMode::Once);
@@ -83,6 +84,16 @@ impl From<EnemyType> for Enemy {
                 atk_anim_timer: Timer::from_seconds(0.5, TimerMode::Once),
                 move_step_timer: Timer::from_seconds(0.25, TimerMode::Repeating),
             },
+            EnemyType::Knight => Enemy {
+                decision_timer: Timer::from_seconds(
+                    rng.gen_range(
+                        (ENEMY_DECISION_TIME_MIN / 1.25)..(ENEMY_DECISION_TIME_MAX / 1.25),
+                    ),
+                    TimerMode::Once,
+                ),
+                atk_anim_timer: Timer::from_seconds(2.5, TimerMode::Once),
+                move_step_timer: Timer::from_seconds(0.25, TimerMode::Repeating),
+            },
         }
     }
 }
@@ -100,11 +111,19 @@ impl Command for SpawnEnemy {
 
         let assets = world.get_resource::<TextureAssets>().unwrap();
 
+        let enemy_type = match rand::random::<bool>() {
+            true => EnemyType::Wizard,
+            false => EnemyType::Knight,
+        };
+
         world.spawn((
-            Enemy::from(EnemyType::Wizard),
+            Enemy::from(enemy_type.clone()),
             position,
             SpriteSheetBundle {
-                texture_atlas: assets.wizard_sheet.clone(),
+                texture_atlas: match enemy_type {
+                    EnemyType::Wizard => assets.wizard_sheet.clone(),
+                    EnemyType::Knight => assets.knight_sheet.clone(),
+                },
                 transform: Transform::from_xyz(position.x as f32, position.y as f32, 1.5),
                 sprite: TextureAtlasSprite {
                     custom_size: Some(Vec2::new(1., 1.)),
@@ -114,13 +133,14 @@ impl Command for SpawnEnemy {
             },
             Target(None),
             EnemyState::Idle,
-            EnemyType::Wizard,
+            enemy_type,
         ));
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, PartialEq, Eq)]
 enum EnemyType {
+    Knight,
     Wizard,
 }
 
@@ -209,9 +229,14 @@ fn enemy_state_management_system(
     time: Res<Time>,
     audio_assets: Res<AudioAssets>,
     gameplay_channel: Res<AudioChannel<Gameplay>>,
-    mut enemy_query: Query<(&mut Enemy, &mut EnemyState, &mut TextureAtlasSprite)>,
+    mut enemy_query: Query<(
+        &mut Enemy,
+        &EnemyType,
+        &mut EnemyState,
+        &mut TextureAtlasSprite,
+    )>,
 ) {
-    for (mut enemy, mut enemy_state, mut sprite) in enemy_query.iter_mut() {
+    for (mut enemy, enemy_type, mut enemy_state, mut sprite) in enemy_query.iter_mut() {
         if !enemy_state.is_idle() {
             continue;
         }
@@ -223,13 +248,19 @@ fn enemy_state_management_system(
         let new_state = EnemyState::randomize();
 
         match new_state {
-            EnemyState::Idle => enemy.reset_decision_timer(),
-            EnemyState::AttackAnimation => {
-                sprite.index = 2;
-                gameplay_channel
-                    .play(audio_assets.wizard_prepare.clone())
-                    .with_volume(0.25);
+            EnemyState::Idle => {
+                sprite.index = 0;
+                enemy.reset_decision_timer()
             }
+            EnemyState::AttackAnimation => match enemy_type {
+                EnemyType::Wizard => {
+                    sprite.index = 2;
+                    gameplay_channel
+                        .play(audio_assets.wizard_prepare.clone())
+                        .with_volume(0.25);
+                }
+                EnemyType::Knight => {}
+            },
             _ => {}
         }
 
@@ -258,7 +289,7 @@ fn move_enemy_system(
 
         if target.is_none() {
             match enemy_type {
-                EnemyType::Wizard => {
+                _ => {
                     let mut rng = rand::thread_rng();
                     let x = rng.gen_range(-LEVEL_SIZE.x..LEVEL_SIZE.x);
                     let y = rng.gen_range(-LEVEL_SIZE.y..LEVEL_SIZE.y);
@@ -322,19 +353,30 @@ fn map_enemy_position(mut enemies: Query<(&Position, &mut Transform)>) {
 
 fn enemy_attack_animation_system(
     time: Res<Time>,
+    snake: Res<Snake>,
     mut enemy_query: Query<(
         &mut Enemy,
         &mut EnemyState,
         &EnemyType,
+        &Position,
         &mut TextureAtlasSprite,
     )>,
 ) {
-    for (mut enemy, mut enemy_state, enemy_type, mut sprite) in enemy_query.iter_mut() {
+    for (mut enemy, mut enemy_state, enemy_type, position, mut sprite) in enemy_query.iter_mut() {
         if !enemy_state.is_attack_animation() {
             continue;
         }
 
         if !enemy.atk_anim_timer.tick(time.delta()).just_finished() {
+            for segment in snake.segments.iter() {
+                // If there is a segment directly below the knight, attack
+                if segment.x == position.x && segment.y == position.y - 1 {
+                    // gameplay_channel.play(audio_assets.knight_attack.clone());
+                    enemy_state.to_attacking();
+                    enemy.reset_attack_animation_timer(enemy_type);
+                }
+            }
+
             continue;
         }
 
@@ -348,21 +390,34 @@ fn enemy_attack_system(
     assets: Res<TextureAssets>,
     audio_assets: Res<AudioAssets>,
     gameplay_channel: Res<AudioChannel<Gameplay>>,
-    snake: Res<Snake>,
+    mut snake: ResMut<Snake>,
     mut commands: Commands,
-    mut enemy_query: Query<(&mut Enemy, &mut EnemyState, &EnemyType, &Transform), With<Enemy>>,
+    mut enemy_query: Query<
+        (
+            &mut Enemy,
+            &mut EnemyState,
+            &mut TextureAtlasSprite,
+            &Position,
+            &EnemyType,
+            &Transform,
+        ),
+        With<Enemy>,
+    >,
 ) {
-    let mut rng = rand::thread_rng();
-    let segments = snake.segments.iter().collect::<Vec<_>>();
-    let segment_position = segments.choose(&mut rng).unwrap();
+    for (mut enemy, mut enemy_state, mut sprite, position, enemy_type, transform) in
+        enemy_query.iter_mut()
+    {
+        println!("Enemy state: {:?}", enemy_state);
 
-    for (mut enemy, mut enemy_state, enemy_type, transform) in enemy_query.iter_mut() {
         if !enemy_state.is_attacking() {
             continue;
         }
 
         match enemy_type {
             EnemyType::Wizard => {
+                let mut rng = rand::thread_rng();
+                let segments = snake.segments.iter().collect::<Vec<_>>();
+                let segment_position = segments.choose(&mut rng).unwrap();
                 let mut transform = *transform;
                 let direction = Vec2::new(
                     segment_position.x as f32 - transform.translation.x,
@@ -389,10 +444,31 @@ fn enemy_attack_system(
 
                 gameplay_channel.play(audio_assets.wizard_attack.clone());
             }
+            EnemyType::Knight => {
+                sprite.index = 2;
+                gameplay_channel.play(audio_assets.knight_attack.clone());
+                let mut damaged = false;
+
+                let segments = snake.segments.iter().collect::<Vec<_>>();
+                for segment in segments {
+                    // If there is a segment directly below the knight, attack
+                    if segment.x == position.x && segment.y == position.y - 1 {
+                        // gameplay_channel.play(audio_assets.knight_attack.clone());
+                        damaged = true;
+                    }
+                }
+
+                if damaged {
+                    snake.damage(1);
+                    if snake.is_dead() {
+                        commands.insert_resource(NextState(GameState::GameOver));
+                    }
+                }
+            }
         }
 
-        enemy.reset_decision_timer();
         enemy_state.to_idle();
+        enemy.reset_decision_timer();
     }
 }
 

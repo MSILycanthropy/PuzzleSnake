@@ -81,7 +81,7 @@ impl Default for Snake {
 }
 
 impl Snake {
-    fn head(&self) -> &Position {
+    pub fn head(&self) -> &Position {
         self.segments.front().unwrap()
     }
 
@@ -89,15 +89,19 @@ impl Snake {
         self.segments.back().unwrap()
     }
 
-    fn direction(&self) -> Direction {
+    fn direction(&self) -> Result<Direction, ()> {
         let head = self.head();
-        let one_before_head = self.segments.get(1).unwrap();
+        let one_before_head = if let Some(segment) = self.segments.get(1) {
+            segment
+        } else {
+            return Err(());
+        };
 
         match (head.x - one_before_head.x, head.y - one_before_head.y) {
-            (1, 0) => Direction::Right,
-            (-1, 0) => Direction::Left,
-            (0, 1) => Direction::Up,
-            (0, -1) => Direction::Down,
+            (1, 0) => Ok(Direction::Right),
+            (-1, 0) => Ok(Direction::Left),
+            (0, 1) => Ok(Direction::Up),
+            (0, -1) => Ok(Direction::Down),
             _ => unreachable!(),
         }
     }
@@ -109,7 +113,7 @@ impl Snake {
     }
 
     pub fn is_dead(&self) -> bool {
-        self.segments.len() <= 3
+        self.segments.len() < 3
     }
 }
 
@@ -361,8 +365,10 @@ fn input_system(
         new_direction = Direction::Right;
     }
 
-    if new_direction != snake_direction.opposite() {
-        *direction = new_direction;
+    if let Ok(snake_direction) = snake_direction {
+        if new_direction != snake_direction.opposite() {
+            *direction = new_direction;
+        }
     }
 }
 

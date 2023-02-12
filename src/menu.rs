@@ -73,12 +73,27 @@ fn main_menu_setup_system(mut commands: Commands, ui_assets: Res<UiAssets>) {
             OnMenu,
         ))
         .with_children(|parent| {
+            parent.spawn(ImageBundle {
+                style: Style {
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    size: Size::new(Val::Px(480.0), Val::Px(160.0)),
+                    ..default()
+                },
+                image: ui_assets.logo.clone().into(),
+                ..default()
+            });
+
             parent.spawn((
                 ButtonBundle {
                     style: Style {
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         size: Size::new(Val::Px(200.0), Val::Px(80.0)),
+                        margin: UiRect {
+                            top: Val::Px(60.0),
+                            ..default()
+                        },
                         ..default()
                     },
                     image: ui_assets.start_button.clone().into(),

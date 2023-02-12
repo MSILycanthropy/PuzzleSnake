@@ -76,6 +76,9 @@ pub struct TextureAssets {
     pub wizard_sheet: Handle<TextureAtlas>,
     #[asset(path = "sprites/projectile.png")]
     pub projectile: Handle<Image>,
+    #[asset(texture_atlas(tile_size_x = 16., tile_size_y = 16., columns = 3, rows = 1))]
+    #[asset(path = "sprites/knight_sheet.png")]
+    pub knight_sheet: Handle<TextureAtlas>,
 }
 
 #[derive(AssetCollection, Resource)]
@@ -89,6 +92,8 @@ pub struct AudioAssets {
     pub wizard_prepare: Handle<AudioSource>,
     #[asset(path = "sounds/wizard_attack.ogg")]
     pub wizard_attack: Handle<AudioSource>,
+    #[asset(path = "sounds/knight_attack.wav")]
+    pub knight_attack: Handle<AudioSource>,
 
     #[asset(path = "sounds/hit.ogg")]
     pub hit: Handle<AudioSource>,
@@ -100,6 +105,9 @@ pub struct AudioAssets {
 
 #[derive(AssetCollection, Resource)]
 pub struct UiAssets {
+    #[asset(path = "ui/logo.png")]
+    pub logo: Handle<Image>,
+
     #[asset(path = "ui/exit_button.png")]
     pub exit_button: Handle<Image>,
     #[asset(path = "ui/start_button.png")]
