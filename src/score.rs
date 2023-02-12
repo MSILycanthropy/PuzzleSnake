@@ -152,7 +152,6 @@ fn scale_difficulty(score: Res<Score>, mut max_enemies: ResMut<MaxEnemies>) {
     max_enemies.0 = cmp::max(1, calculated);
 }
 
-// TODO: More margin on the UI. Spread that shit out fr
 fn spawn_game_over(score: Res<Score>, mut commands: Commands, ui_assets: Res<UiAssets>) {
     commands
         .spawn((
@@ -169,8 +168,10 @@ fn spawn_game_over(score: Res<Score>, mut commands: Commands, ui_assets: Res<UiA
             ScoreDisplay,
         ))
         .with_children(|parent| {
-            score.0.to_string().chars().for_each(|char| {
-                parent.spawn(ScoreBundle::new(&char, &ui_assets));
+            parent.spawn(NodeBundle::default()).with_children(|parent| {
+                score.0.to_string().chars().for_each(|char| {
+                    parent.spawn(ScoreBundle::new(&char, &ui_assets));
+                });
             });
 
             parent.spawn(ImageBundle {

@@ -41,23 +41,6 @@ fn menu_setup_system(mut commands: Commands) {
 }
 
 fn main_menu_setup_system(mut commands: Commands, ui_assets: Res<UiAssets>) {
-    for i in -40..41 {
-        for j in -22..24 {
-            commands.spawn((SpriteBundle {
-                texture: ui_assets.tile_dark.clone(),
-                transform: Transform {
-                    translation: Vec3::new(i as f32, j as f32, 0.0),
-                    ..default()
-                },
-                sprite: Sprite {
-                    custom_size: Some(Vec2::new(1.0, 1.0)),
-                    ..default()
-                },
-                ..default()
-            },));
-        }
-    }
-
     commands
         .spawn((
             NodeBundle {
