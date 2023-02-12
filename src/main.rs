@@ -4,7 +4,7 @@ use bevy_framepace::{FramepacePlugin, FramepaceSettings, Limiter};
 use bevy_kira_audio::prelude::*;
 use bevy_pixel_camera::{PixelCameraBundle, PixelCameraPlugin};
 use iyes_loopless::prelude::*;
-use super_snake::{
+use snake_survivors::{
     despawn_after, game::GamePlugin, AudioAssets, GameState, TextureAssets, UiAssets, SCALE,
 };
 

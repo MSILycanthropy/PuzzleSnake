@@ -1,5 +1,5 @@
 [package]
-name = "super_snake"
+name = "snake_survivors"
 version = "0.1.0"
 edition = "2021"
 
