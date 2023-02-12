@@ -1,11 +1,8 @@
 use bevy::prelude::*;
 use iyes_loopless::prelude::*;
 
-use crate::{despawn, GameState};
+use crate::{despawn, GameState, UiAssets};
 
-// const MENU_FONT: &str = "fonts/impact.ttf";
-
-// TODO: More menus :)
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
 enum MenuState {
     Disabled,
@@ -13,10 +10,10 @@ enum MenuState {
 }
 
 #[derive(Component)]
-struct PlayButton;
+pub struct PlayButton;
 
 #[derive(Component)]
-struct ExitButton;
+pub struct ExitButton;
 
 #[derive(Component)]
 struct OnMenu;
@@ -25,7 +22,8 @@ pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_loopless_state(MenuState::Main)
+        app.add_loopless_state(MenuState::Disabled)
+            .add_enter_system(GameState::Menu, menu_setup_system)
             .add_enter_system(MenuState::Main, main_menu_setup_system)
             .add_system_set(
                 ConditionSet::new()
@@ -38,7 +36,28 @@ impl Plugin for MenuPlugin {
     }
 }
 
-fn main_menu_setup_system(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn menu_setup_system(mut commands: Commands) {
+    commands.insert_resource(NextState(MenuState::Main));
+}
+
+fn main_menu_setup_system(mut commands: Commands, ui_assets: Res<UiAssets>) {
+    for i in -40..41 {
+        for j in -22..24 {
+            commands.spawn((SpriteBundle {
+                texture: ui_assets.tile_dark.clone(),
+                transform: Transform {
+                    translation: Vec3::new(i as f32, j as f32, 0.0),
+                    ..default()
+                },
+                sprite: Sprite {
+                    custom_size: Some(Vec2::new(1.0, 1.0)),
+                    ..default()
+                },
+                ..default()
+            },));
+        }
+    }
+
     commands
         .spawn((
             NodeBundle {
@@ -54,49 +73,57 @@ fn main_menu_setup_system(mut commands: Commands, asset_server: Res<AssetServer>
             OnMenu,
         ))
         .with_children(|parent| {
-            parent
-                .spawn((
-                    ButtonBundle {
-                        style: Style {
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            size: Size::new(Val::Px(200.0), Val::Px(80.0)),
-                            ..default()
-                        },
-                        image: UiImage {
-                            0: asset_server.load("sprites/start_button.png")
-                        },
-                        ..default()
-                    },
-                    PlayButton,
-                ));
+            parent.spawn(ImageBundle {
+                style: Style {
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    size: Size::new(Val::Px(480.0), Val::Px(160.0)),
+                    ..default()
+                },
+                image: ui_assets.logo.clone().into(),
+                ..default()
+            });
 
-            parent
-                .spawn((
-                    ButtonBundle {
-                        style: Style {
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            size: Size::new(Val::Px(200.), Val::Px(80.)),
-                            margin: UiRect {
-                                left: Val::Px(0.),
-                                right: Val::Px(0.),
-                                top: Val::Px(10.),
-                                bottom: Val::Px(0.),
-                            },
+            parent.spawn((
+                ButtonBundle {
+                    style: Style {
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        size: Size::new(Val::Px(200.0), Val::Px(80.0)),
+                        margin: UiRect {
+                            top: Val::Px(60.0),
                             ..default()
-                        },
-                        image: UiImage {
-                            0: asset_server.load("sprites/exit_button.png")
                         },
                         ..default()
                     },
-                    ExitButton,
-                ));
+                    image: ui_assets.start_button.clone().into(),
+                    ..default()
+                },
+                PlayButton,
+            ));
+
+            #[cfg(not(target_arch = "wasm32"))]
+            parent.spawn((
+                ButtonBundle {
+                    style: Style {
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        size: Size::new(Val::Px(200.), Val::Px(80.)),
+                        margin: UiRect {
+                            top: Val::Px(20.),
+                            ..default()
+                        },
+                        ..default()
+                    },
+                    image: ui_assets.exit_button.clone().into(),
+                    ..default()
+                },
+                ExitButton,
+            ));
         });
 }
 
-fn button_interacted<T: Component>(
+pub fn button_interacted<T: Component>(
     query: Query<&Interaction, (Changed<Interaction>, With<Button>, With<T>)>,
 ) -> bool {
     query
@@ -104,11 +131,11 @@ fn button_interacted<T: Component>(
         .any(|interaction| *interaction == Interaction::Clicked)
 }
 
-fn button_play(mut commands: Commands) {
+pub fn button_play(mut commands: Commands) {
     commands.insert_resource(NextState(MenuState::Disabled));
     commands.insert_resource(NextState(GameState::Playing));
 }
 
-fn button_exit(mut app_exit_events: ResMut<Events<bevy::app::AppExit>>) {
+pub fn button_exit(mut app_exit_events: ResMut<Events<bevy::app::AppExit>>) {
     app_exit_events.send(bevy::app::AppExit);
 }

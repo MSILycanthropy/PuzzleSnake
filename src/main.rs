@@ -1,10 +1,12 @@
-use bevy::{prelude::*, window::close_on_esc};
+use bevy::prelude::*;
 use bevy_asset_loader::prelude::*;
-use bevy_framepace::{debug::DiagnosticsPlugin, FramepacePlugin, FramepaceSettings, Limiter};
+use bevy_framepace::{FramepacePlugin, FramepaceSettings, Limiter};
 use bevy_kira_audio::prelude::*;
 use bevy_pixel_camera::{PixelCameraBundle, PixelCameraPlugin};
 use iyes_loopless::prelude::*;
-use super_snake::{despawn_after, game::GamePlugin, AudioAssets, GameState, TextureAssets, SCALE};
+use super_snake::{
+    despawn_after, game::GamePlugin, AudioAssets, GameState, TextureAssets, UiAssets, SCALE,
+};
 
 fn main() {
     let mut app = App::new();
@@ -14,10 +16,10 @@ fn main() {
             LoadingState::new(GameState::AssetsLoading)
                 .continue_to_state(GameState::Menu)
                 .with_collection::<TextureAssets>()
-                .with_collection::<AudioAssets>(),
+                .with_collection::<AudioAssets>()
+                .with_collection::<UiAssets>(),
         )
         .add_startup_system(setup_system)
-        .add_system(close_on_esc)
         .add_system(despawn_after)
         .add_plugins(
             DefaultPlugins
@@ -32,7 +34,6 @@ fn main() {
                 }),
         )
         .add_plugin(FramepacePlugin)
-        .add_plugin(DiagnosticsPlugin)
         .add_plugin(AudioPlugin)
         .add_plugin(PixelCameraPlugin)
         .add_plugin(GamePlugin);

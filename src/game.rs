@@ -6,7 +6,7 @@ use crate::{
 };
 
 pub struct GamePlugin;
-// TODO: This should.. be in SnakePlugin?
+
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(LevelPlugin)

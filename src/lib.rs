@@ -33,10 +33,10 @@ impl Position {
     }
 
     pub fn in_world(&self) -> bool {
-        self.x >= -LEVEL_SIZE
-            && self.x <= LEVEL_SIZE
-            && self.y >= -LEVEL_SIZE
-            && self.y <= LEVEL_SIZE
+        self.x >= -LEVEL_SIZE.x
+            && self.x <= LEVEL_SIZE.x
+            && self.y >= -LEVEL_SIZE.y
+            && self.y <= LEVEL_SIZE.y
     }
 }
 
@@ -54,8 +54,6 @@ pub struct DestroyAfter(Timer);
 
 #[derive(AssetCollection, Resource)]
 pub struct TextureAssets {
-    #[asset(path = "sprites/tile_dark.png")]
-    pub tile_dark: Handle<Image>,
     #[asset(path = "sprites/tile_light.png")]
     pub tile_light: Handle<Image>,
     #[asset(texture_atlas(tile_size_x = 16., tile_size_y = 16., columns = 3, rows = 2))]
@@ -78,6 +76,9 @@ pub struct TextureAssets {
     pub wizard_sheet: Handle<TextureAtlas>,
     #[asset(path = "sprites/projectile.png")]
     pub projectile: Handle<Image>,
+    #[asset(texture_atlas(tile_size_x = 16., tile_size_y = 16., columns = 3, rows = 1))]
+    #[asset(path = "sprites/knight_sheet.png")]
+    pub knight_sheet: Handle<TextureAtlas>,
 }
 
 #[derive(AssetCollection, Resource)]
@@ -91,6 +92,8 @@ pub struct AudioAssets {
     pub wizard_prepare: Handle<AudioSource>,
     #[asset(path = "sounds/wizard_attack.ogg")]
     pub wizard_attack: Handle<AudioSource>,
+    #[asset(path = "sounds/knight_attack.wav")]
+    pub knight_attack: Handle<AudioSource>,
 
     #[asset(path = "sounds/hit.ogg")]
     pub hit: Handle<AudioSource>,
@@ -98,6 +101,42 @@ pub struct AudioAssets {
     pub death_by_bumping: Handle<AudioSource>,
     #[asset(path = "sounds/eat.ogg")]
     pub eat: Handle<AudioSource>,
+}
+
+#[derive(AssetCollection, Resource)]
+pub struct UiAssets {
+    #[asset(path = "ui/logo.png")]
+    pub logo: Handle<Image>,
+
+    #[asset(path = "ui/exit_button.png")]
+    pub exit_button: Handle<Image>,
+    #[asset(path = "ui/start_button.png")]
+    pub start_button: Handle<Image>,
+    #[asset(path = "ui/game_over.png")]
+    pub game_over: Handle<Image>,
+    #[asset(path = "ui/tile_dark.png")]
+    pub tile_dark: Handle<Image>,
+
+    #[asset(path = "ui/0.png")]
+    pub zero: Handle<Image>,
+    #[asset(path = "ui/1.png")]
+    pub one: Handle<Image>,
+    #[asset(path = "ui/2.png")]
+    pub two: Handle<Image>,
+    #[asset(path = "ui/3.png")]
+    pub three: Handle<Image>,
+    #[asset(path = "ui/4.png")]
+    pub four: Handle<Image>,
+    #[asset(path = "ui/5.png")]
+    pub five: Handle<Image>,
+    #[asset(path = "ui/6.png")]
+    pub six: Handle<Image>,
+    #[asset(path = "ui/7.png")]
+    pub seven: Handle<Image>,
+    #[asset(path = "ui/8.png")]
+    pub eight: Handle<Image>,
+    #[asset(path = "ui/9.png")]
+    pub nine: Handle<Image>,
 }
 
 pub fn despawn<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands: Commands) {
