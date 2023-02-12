@@ -407,8 +407,6 @@ fn enemy_attack_system(
     for (mut enemy, mut enemy_state, mut sprite, position, enemy_type, transform) in
         enemy_query.iter_mut()
     {
-        println!("Enemy state: {:?}", enemy_state);
-
         if !enemy_state.is_attacking() {
             continue;
         }
@@ -446,14 +444,14 @@ fn enemy_attack_system(
             }
             EnemyType::Knight => {
                 sprite.index = 2;
-                gameplay_channel.play(audio_assets.knight_attack.clone());
+                gameplay_channel
+                    .play(audio_assets.knight_attack.clone())
+                    .with_volume(0.25);
                 let mut damaged = false;
 
                 let segments = snake.segments.iter().collect::<Vec<_>>();
                 for segment in segments {
-                    // If there is a segment directly below the knight, attack
                     if segment.x == position.x && segment.y == position.y - 1 {
-                        // gameplay_channel.play(audio_assets.knight_attack.clone());
                         damaged = true;
                     }
                 }

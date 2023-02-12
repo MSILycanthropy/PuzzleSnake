@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     enemy::EnemyPlugin, level::LevelPlugin, menu::MenuPlugin, music::MusicPlugin,
-    score::ScorePlugin, snake::SnakePlugin,
+    score::ScorePlugin, snake::SnakePlugin, splash::SplashPlugin,
 };
 
 pub struct GamePlugin;
@@ -14,6 +14,7 @@ impl Plugin for GamePlugin {
             .add_plugin(EnemyPlugin)
             .add_plugin(MenuPlugin)
             .add_plugin(MusicPlugin)
-            .add_plugin(ScorePlugin);
+            .add_plugin(ScorePlugin)
+            .add_plugin(SplashPlugin);
     }
 }

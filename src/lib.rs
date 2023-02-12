@@ -10,12 +10,14 @@ pub mod menu;
 pub mod music;
 pub mod score;
 pub mod snake;
+pub mod splash;
 
 pub const SCALE: i32 = 32;
 
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
 pub enum GameState {
     AssetsLoading,
+    SplashScreen,
     Menu,
     Playing,
     GameOver,

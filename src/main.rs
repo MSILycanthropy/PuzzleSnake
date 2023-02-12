@@ -14,7 +14,7 @@ fn main() {
     app.add_loopless_state(GameState::AssetsLoading)
         .add_loading_state(
             LoadingState::new(GameState::AssetsLoading)
-                .continue_to_state(GameState::Menu)
+                .continue_to_state(GameState::SplashScreen)
                 .with_collection::<TextureAssets>()
                 .with_collection::<AudioAssets>()
                 .with_collection::<UiAssets>(),
