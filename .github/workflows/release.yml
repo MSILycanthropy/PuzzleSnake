@@ -1,9 +1,7 @@
 name: release-flow
 
 on:
-  push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+*"
+  workflow_dispatch:
 
 env:
   # heads-up: this value is used as a pattern in an sed command as a workaround for a trunk issue
