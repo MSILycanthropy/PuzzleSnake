@@ -36,7 +36,7 @@ impl Plugin for SnakePlugin {
                     .label("movement"),
             )
             .add_system(input_system.run_in_state(GameState::Playing))
-            .add_fixed_timestep_system("snake", 0, growth_system.run_in_state(GameState::Playing))
+            .add_system(growth_system.run_in_state(GameState::Playing))
             .add_fixed_timestep_system(
                 "snake",
                 0,
@@ -87,6 +87,19 @@ impl Snake {
 
     fn tail(&self) -> &Position {
         self.segments.back().unwrap()
+    }
+
+    fn direction(&self) -> Direction {
+        let head = self.head();
+        let one_before_head = self.segments.get(1).unwrap();
+
+        match (head.x - one_before_head.x, head.y - one_before_head.y) {
+            (1, 0) => Direction::Right,
+            (-1, 0) => Direction::Left,
+            (0, 1) => Direction::Up,
+            (0, -1) => Direction::Down,
+            _ => unreachable!(),
+        }
     }
 
     pub fn damage(&mut self, amount: usize) {
@@ -189,7 +202,7 @@ fn draw_snake_system(
 
 fn draw_snake_head(commands: &mut Commands, assets: &Res<TextureAssets>, snake: &Snake) {
     let head = snake.head();
-    let mut transform = Transform::from_xyz(head.x as f32, head.y as f32, 1.);
+    let mut transform = Transform::from_xyz(head.x as f32, head.y as f32, 2.);
 
     let (x, y) = (head.x - snake.segments[1].x, head.y - snake.segments[1].y);
     let rotation = match (x, y) {
@@ -218,7 +231,7 @@ fn draw_snake_head(commands: &mut Commands, assets: &Res<TextureAssets>, snake: 
 
 fn draw_snake_tail(commands: &mut Commands, assets: &Res<TextureAssets>, snake: &Snake) {
     let tail = snake.tail();
-    let mut transform = Transform::from_xyz(tail.x as f32, tail.y as f32, 1.);
+    let mut transform = Transform::from_xyz(tail.x as f32, tail.y as f32, 2.);
 
     let (x, y) = (
         tail.x - snake.segments[snake.segments.len() - 2].x,
@@ -257,7 +270,7 @@ fn draw_snake_body(
     let previous_segment = &snake.segments[current_index - 1];
     let next_segment = &snake.segments[current_index + 1];
 
-    let mut transform = Transform::from_xyz(current_segment.x as f32, current_segment.y as f32, 1.);
+    let mut transform = Transform::from_xyz(current_segment.x as f32, current_segment.y as f32, 2.);
 
     let previous_offset = Position {
         x: previous_segment.x - current_segment.x,
@@ -327,8 +340,13 @@ fn move_snake_system(mut snake: ResMut<Snake>, direction: Res<Direction>) {
     snake.segments.pop_back();
 }
 
-fn input_system(keyboard_input: Res<Input<KeyCode>>, mut direction: ResMut<Direction>) {
+fn input_system(
+    snake: Res<Snake>,
+    keyboard_input: Res<Input<KeyCode>>,
+    mut direction: ResMut<Direction>,
+) {
     let mut new_direction = direction.clone();
+    let snake_direction = snake.direction();
 
     if keyboard_input.pressed(KeyCode::W) | keyboard_input.pressed(KeyCode::Up) {
         new_direction = Direction::Up;
@@ -343,7 +361,7 @@ fn input_system(keyboard_input: Res<Input<KeyCode>>, mut direction: ResMut<Direc
         new_direction = Direction::Right;
     }
 
-    if new_direction != direction.opposite() {
+    if new_direction != snake_direction.opposite() {
         *direction = new_direction;
     }
 }
@@ -417,7 +435,7 @@ fn damage_system(
                     transform: Transform::from_xyz(
                         enemy_attack_position.x as f32,
                         enemy_attack_position.y as f32,
-                        2.,
+                        3.,
                     ),
                     sprite: Sprite {
                         custom_size: Some(Vec2::new(2., 2.)),

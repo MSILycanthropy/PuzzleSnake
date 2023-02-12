@@ -22,13 +22,13 @@ impl Plugin for MusicPlugin {
             .add_audio_channel::<Gameplay>()
             .add_enter_system(GameState::Menu, play_menu_music_system)
             .add_exit_system(GameState::Menu, stop_menu_music_system)
+            .add_enter_system(GameState::GameOver, play_menu_music_system)
+            .add_exit_system(GameState::GameOver, stop_menu_music_system)
             .add_enter_system(GameState::Playing, play_music_system)
             .add_exit_system(GameState::Playing, stop_music_system);
     }
 }
 
-// TODO: This can probably be made generic
-// TODO: Volumes are kinda weird. I just chose some numbers that felt alright.
 fn play_music_system(assets: Res<AudioAssets>, background: Res<AudioChannel<Background>>) {
     background
         .play(assets.gameplay_music.clone())

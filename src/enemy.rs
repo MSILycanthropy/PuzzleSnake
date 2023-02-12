@@ -105,7 +105,7 @@ impl Command for SpawnEnemy {
             position,
             SpriteSheetBundle {
                 texture_atlas: assets.wizard_sheet.clone(),
-                transform: Transform::from_xyz(position.x as f32, position.y as f32, 0.5),
+                transform: Transform::from_xyz(position.x as f32, position.y as f32, 1.5),
                 sprite: TextureAtlasSprite {
                     custom_size: Some(Vec2::new(1., 1.)),
                     ..default()
@@ -164,7 +164,15 @@ impl EnemyState {
             EnemyState::AttackAnimation,
             EnemyState::Moving,
         ];
-        states.choose(&mut rng).unwrap().clone()
+        states
+            .choose_weighted(&mut rng, |state| match state {
+                EnemyState::Idle => 5,
+                EnemyState::AttackAnimation => 2,
+                EnemyState::Moving => 3,
+                _ => 0,
+            })
+            .unwrap()
+            .clone()
     }
 }
 
@@ -178,8 +186,8 @@ struct Target(Option<Position>);
 
 fn random_position() -> Position {
     let mut rng = rand::thread_rng();
-    let x = rng.gen_range(-LEVEL_SIZE..=LEVEL_SIZE);
-    let y = rng.gen_range(-LEVEL_SIZE..=LEVEL_SIZE);
+    let x = rng.gen_range(-LEVEL_SIZE.x..=LEVEL_SIZE.x);
+    let y = rng.gen_range(-LEVEL_SIZE.y..=LEVEL_SIZE.y);
     Position { x, y }
 }
 
@@ -252,8 +260,8 @@ fn move_enemy_system(
             match enemy_type {
                 EnemyType::Wizard => {
                     let mut rng = rand::thread_rng();
-                    let x = rng.gen_range(-LEVEL_SIZE..LEVEL_SIZE);
-                    let y = rng.gen_range(-LEVEL_SIZE..LEVEL_SIZE);
+                    let x = rng.gen_range(-LEVEL_SIZE.x..LEVEL_SIZE.x);
+                    let y = rng.gen_range(-LEVEL_SIZE.y..LEVEL_SIZE.y);
 
                     *target = Target(Some(Position { x, y }));
                 }
